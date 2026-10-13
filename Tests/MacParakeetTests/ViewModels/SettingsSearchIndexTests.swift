@@ -533,7 +533,10 @@ final class SettingsSearchIndexTests: XCTestCase {
     /// earlier wording stays searchable as a keyword.
     func testRetitledRowsKeepTheirEarlierWordingSearchable() throws {
         let retitled = [
-            (id: "dictation.idle.pill", title: "Show dictation pill at all times", earlier: "idle pill"),
+            (
+                id: "dictation.idle.pill", title: "Show dictation pill at all times",
+                earlier: "Show idle pill at all times"
+            ),
             (id: "meeting.autoStop", title: "Stop recording automatically", earlier: "auto-stop meetings"),
             (
                 id: "system.permissions.screen", title: "Screen & System Audio",
@@ -669,6 +672,11 @@ final class SettingsSearchIndexTests: XCTestCase {
         for toggle in try captures(of: #"\bToggle\(\s*"((?:[^"\\]|\\.)+)""#, in: source) {
             declared[toggle[0], default: 0] += 1
         }
+        // `autoSaveOptions` draws its "Format" row once in source but is called
+        // for both the Transcription and Meeting Recording cards.
+        let autoSaveCalls = try captures(of: #"(?<!func )\bautoSaveOptions\(\s*format:"#, in: source).count
+        XCTAssertEqual(autoSaveCalls, 2, "autoSaveOptions should be called once per card")
+        declared["Format", default: 0] += max(autoSaveCalls - 1, 0)
         XCTAssertGreaterThan(
             declared.values.reduce(0, +), 40, "The row scan should find the Settings rows"
         )

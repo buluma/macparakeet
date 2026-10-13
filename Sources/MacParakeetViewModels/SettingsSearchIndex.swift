@@ -245,7 +245,8 @@ public enum SettingsSearchIndex {
             title: "Show dictation pill at all times",
             subtitle: "in Dictation",
             keywords: [
-                "idle pill", "pill", "indicator", "always visible", "menu bar", "floating",
+                "Show idle pill at all times", "idle pill", "pill", "indicator", "always visible",
+                "menu bar", "floating",
             ],
             cardAnchor: "dictation"
         ),
