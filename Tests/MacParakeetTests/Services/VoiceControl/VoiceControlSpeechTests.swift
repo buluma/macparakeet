@@ -1,3 +1,4 @@
+import AVFoundation
 import XCTest
 @testable import MacParakeetCore
 @testable import MacParakeetViewModels
@@ -70,15 +71,21 @@ private actor VoiceControlTestAudio: AudioProcessorProtocol {
 
 private actor VoiceControlTestSTT: STTTranscribing {
     var jobs: [STTJobKind] = []
+    var frames: [Int64] = []
     var shouldWait = false
+    var waitsOnlyOnce = false
     var waiting: CheckedContinuation<Void, Never>?
-    func setWait() { shouldWait = true }
+    func setWait(onlyOnce: Bool = false) { shouldWait = true; waitsOnlyOnce = onlyOnce }
     func release() { waiting?.resume(); waiting = nil }
     func transcribe(audioPath: String, job: STTJobKind, onProgress: (@Sendable (Int, Int) -> Void)?) async throws
         -> STTResult
     {
         jobs.append(job)
-        if shouldWait { await withCheckedContinuation { waiting = $0 } }
+        frames.append((try? AVAudioFile(forReading: URL(fileURLWithPath: audioPath)).length) ?? -1)
+        if shouldWait {
+            if waitsOnlyOnce { shouldWait = false }
+            await withCheckedContinuation { waiting = $0 }
+        }
         return STTResult(text: "type um, DO NOT expand this snippet")
     }
 }
@@ -299,4 +306,137 @@ extension VoiceControlSpeechTests {
         XCTAssertTrue(model.steps.isEmpty)
         XCTAssertNil(model.conversation.expectedResponse)
     }
+}
+
+extension VoiceControlSpeechTests {
+    // 2 x 1600 speech samples begin an utterance; 9 x 1600 silent samples (900 ms) end it.
+    private static let speech = Array(repeating: Float(0.1), count: 1600)
+    private static let silence = Array(repeating: Float(0), count: 1600)
+
+    private func speakThenPause(_ audio: VoiceControlTestAudio) async {
+        for _ in 0..<2 { await audio.emit(Self.speech) }
+        for _ in 0..<9 { await audio.emit(Self.silence) }
+    }
+
+    private func waitForJobs(_ stt: VoiceControlTestSTT, count: Int) async {
+        for _ in 0..<10_000 {
+            if await stt.jobs.count >= count { return }
+            await Task.yield()
+        }
+    }
+
+    func testSpeechResumingBeforePendingFinalMergesEarlierWordsIntoOneCommand() async throws {
+        let audio = try VoiceControlTestAudio()
+        let stt = VoiceControlTestSTT()
+        await stt.setWait(onlyOnce: true)
+        let session = VoiceControlSpeechSession(audio: audio, stt: stt)
+        let events = session.events
+        let delivered = TranscriptCounter()
+        let collector = Task {
+            for await event in events {
+                if case .transcript = event { await delivered.increment() }
+                if case .measured(let metrics, _) = event { await delivered.note(metrics) }
+                if case .stopped = event { return }
+            }
+        }
+        try await session.begin(handsFree: true)
+        await speakThenPause(audio)
+        for _ in 0..<10_000 {
+            if await stt.waiting != nil { break }
+            await Task.yield()
+        }
+        let firstStarted = await stt.waiting != nil
+        XCTAssertTrue(firstStarted, "The first segment reached final STT before speech resumed")
+        await speakThenPause(audio)
+        await waitForJobs(stt, count: 2)
+        await stt.release()
+        for _ in 0..<10_000 {
+            if await delivered.count >= 1 { break }
+            await Task.yield()
+        }
+        // Give the released first segment time to (wrongly) surface before stopping.
+        for _ in 0..<1000 { await Task.yield() }
+        await session.cancel()
+        await collector.value
+        let frames = await stt.frames
+        XCTAssertEqual(frames.count, 2)
+        XCTAssertEqual(frames.first, 17_600)
+        XCTAssertEqual(
+            frames.last, 35_200, "The resumed utterance carries the earlier segment instead of dropping it")
+        let transcripts = await delivered.count
+        XCTAssertEqual(transcripts, 1, "The superseded partial segment never becomes its own command")
+        let measured = await delivered.metrics
+        XCTAssertEqual(measured.count, 1)
+        XCTAssertEqual(measured.first?.mergedSegments, 1)
+        XCTAssertEqual(measured.first?.pauseMilliseconds, [900], "The merged gap is logged at its full length")
+        XCTAssertEqual(measured.first?.speechMilliseconds, 1_300)
+        XCTAssertEqual(measured.first?.endpointSilenceMilliseconds, 900)
+        XCTAssertNil(measured.first?.sincePreviousMilliseconds)
+    }
+
+    func testSpeechAfterDeliveredFinalStartsAFreshUtterance() async throws {
+        let audio = try VoiceControlTestAudio()
+        let stt = VoiceControlTestSTT()
+        let session = VoiceControlSpeechSession(audio: audio, stt: stt)
+        let events = session.events
+        let delivered = TranscriptCounter()
+        let collector = Task {
+            for await event in events {
+                if case .transcript = event { await delivered.increment() }
+                if case .measured(let metrics, _) = event { await delivered.note(metrics) }
+                if case .stopped = event { return }
+            }
+        }
+        try await session.begin(handsFree: true)
+        await speakThenPause(audio)
+        for _ in 0..<10_000 {
+            if await delivered.count >= 1 { break }
+            await Task.yield()
+        }
+        await speakThenPause(audio)
+        for _ in 0..<10_000 {
+            if await delivered.count >= 2 { break }
+            await Task.yield()
+        }
+        await session.cancel()
+        await collector.value
+        let frames = await stt.frames
+        XCTAssertEqual(frames, [17_600, 17_600], "A delivered command is never merged into the next one")
+        let measured = await delivered.metrics
+        XCTAssertEqual(measured.map(\.mergedSegments), [0, 0])
+        XCTAssertNil(measured.first?.sincePreviousMilliseconds)
+        XCTAssertNotNil(measured.last?.sincePreviousMilliseconds)
+        XCTAssertEqual(measured.last?.overlapWithPrevious, 1, "Saying the same command again reads as a repeat")
+    }
+
+    func testTimerRecordsInTurnPausesButNotLeadingSilenceOrNoise() {
+        var timer = VoiceControlSpeechTimer()
+        timer.consume(count: 1600, voiced: true, inTurn: false)  // a stray blip
+        timer.consume(count: 16_000, voiced: false, inTurn: false)
+        timer.consume(count: 3200, voiced: true, inTurn: false)
+        timer.began(continuing: false)
+        timer.consume(count: 1600, voiced: false, inTurn: true)  // 100 ms: within a word run
+        timer.consume(count: 1600, voiced: true, inTurn: true)
+        timer.consume(count: 8000, voiced: false, inTurn: true)  // 500 ms pause
+        timer.consume(count: 1600, voiced: true, inTurn: true)
+        timer.consume(count: 14_400, voiced: false, inTurn: true)
+        let span = timer.ended()
+        XCTAssertEqual(span.pauseSamples, [8000])
+        XCTAssertEqual(span.segments, 1)
+        XCTAssertEqual(span.speechSamples, 3200 + 1600 + 1600 + 8000 + 1600)
+    }
+
+    func testOverlapIsWordJaccardIgnoringCaseAndPunctuation() {
+        let words = VoiceControlSpeechTurnMetrics.words
+        XCTAssertEqual(VoiceControlSpeechTurnMetrics.overlap(words("Open Safari."), words("open safari")), 1)
+        XCTAssertEqual(VoiceControlSpeechTurnMetrics.overlap(words("open safari"), words("open mail")), 0.33)
+        XCTAssertEqual(VoiceControlSpeechTurnMetrics.overlap([], []), 0)
+    }
+}
+
+private actor TranscriptCounter {
+    var count = 0
+    var metrics: [VoiceControlSpeechTurnMetrics] = []
+    func increment() { count += 1 }
+    func note(_ value: VoiceControlSpeechTurnMetrics) { metrics.append(value) }
 }
