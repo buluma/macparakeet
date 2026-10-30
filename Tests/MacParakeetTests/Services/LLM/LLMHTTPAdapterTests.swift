@@ -55,7 +55,7 @@ final class LLMHTTPAdapterTests: XCTestCase {
             let body = try self.jsonBody(from: request)
             let limit = try XCTUnwrap(body["max_tokens"] as? Int)
             requestCount += 1
-            XCTAssertEqual(limit, requestCount == 1 ? 2_048 : 4_096)
+            XCTAssertEqual(limit, requestCount == 1 ? 700 : 4_096)
             XCTAssertNotNil(body["response_format"])
             let output =
                 requestCount == 1
@@ -71,7 +71,7 @@ final class LLMHTTPAdapterTests: XCTestCase {
                         "finish_reason": requestCount == 1 ? "length" : "stop",
                     ]
                 ],
-                "usage": ["prompt_tokens": 100, "completion_tokens": requestCount == 1 ? 2_048 : 900],
+                "usage": ["prompt_tokens": 100, "completion_tokens": requestCount == 1 ? 700 : 900],
             ]
             return (self.okResponse(for: request), try JSONSerialization.data(withJSONObject: response))
         }
@@ -84,7 +84,47 @@ final class LLMHTTPAdapterTests: XCTestCase {
 
         XCTAssertEqual(requestCount, 2)
         XCTAssertEqual(result.stopReason, "stop")
-        XCTAssertEqual(result.usage?.completionTokens, 2_948)
+        XCTAssertEqual(result.usage?.completionTokens, 1_600)
+    }
+
+    func testKnowledgeCardKeepsInitialLimitAcceptedByCustomOpenAIEndpoint() async throws {
+        var limits: [Int] = []
+        AdapterRequestURLProtocol.handler = { request in
+            let body = try self.jsonBody(from: request)
+            let limit = try XCTUnwrap(body["max_tokens"] as? Int)
+            limits.append(limit)
+            if limit > 1_024 {
+                let response = try XCTUnwrap(
+                    HTTPURLResponse(url: request.url!, statusCode: 400, httpVersion: nil, headerFields: nil))
+                return (response, Data(#"{"error":{"message":"max_tokens exceeds endpoint capacity"}}"#.utf8))
+            }
+            let output = """
+                {"synopsis":"Synthetic card.","topics":[],"decisions":[],"actions":[]}
+                """
+            let response: [String: Any] = [
+                "model": "custom-small",
+                "choices": [["message": ["role": "assistant", "content": output], "finish_reason": "stop"]],
+            ]
+            return (self.okResponse(for: request), try JSONSerialization.data(withJSONObject: response))
+        }
+        let context = LLMExecutionContext(
+            providerConfig: .openai(
+                apiKey: "test", model: "custom-small", baseURL: URL(string: "https://small-model.invalid/v1")!))
+        let client = LLMClient(session: session)
+        // Negative control: this supported endpoint rejects the proposed larger first request.
+        await XCTAssertThrowsErrorAsync {
+            _ = try await client.chatCompletion(
+                messages: [ChatMessage(role: .user, content: "Synthetic transcript.")], context: context,
+                options: ChatCompletionOptions(maxTokens: 2_048, responseFormat: LLMService.knowledgeCardResponseFormat)
+            )
+        }
+        let service = LLMService(
+            client: client, contextResolver: StaticLLMExecutionContextResolver(context: context))
+
+        let result = try await service.generateKnowledgeCard(transcript: "Synthetic transcript.", source: .file)
+
+        XCTAssertEqual(limits, [2_048, 700])
+        XCTAssertEqual(result.stopReason, "stop")
     }
 
     func testOllamaKnowledgeCardActuallySendsBoundedOptionsWithoutChangingGenericRequests() async throws {

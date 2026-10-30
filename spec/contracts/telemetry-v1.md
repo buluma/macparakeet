@@ -342,9 +342,9 @@ complete, structurally valid, non-empty-synopsis provider response; later card
 citation resolution and the conditional database save can still reject it.
 It is not a saved-card counter.
 
-Card recovery makes at most two provider requests. retry_count counts only
-additional provider requests (0 or 1), not bounded local configuration reads
-before dispatch. Token counts sum the responses only when every response
+Card recovery makes at most two LLM client requests. retry_count counts only
+additional client requests (0 or 1), not bounded local configuration reads
+or work internal to a provider. Token counts sum the responses only when every response
 reports that count; a missing count keeps the cumulative count unknown.
 Returned card-generation usage follows the same rule. No prompt, transcript,
 model output, or raw provider error is added to telemetry.

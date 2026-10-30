@@ -496,15 +496,16 @@ public final class LLMService: LLMServiceProtocol, Sendable {
             """
         let responseFormat: ChatResponseFormat? =
             capability == .nativeJSONSchema ? Self.knowledgeCardResponseFormat : nil
-        // JSON keys, quotes and timestamps cost tokens in addition to the stored
-        // 350-token card text. LM Studio has a much smaller configured window.
+        // Preserve successful first requests where model/endpoint capacity is
+        // unknown. JSON syntax and citations get more room after truncation.
         let (initialLimit, recoveryLimit): (Int, Int) =
             switch context.providerConfig.id {
+            case .ollama: (2_048, 4_096)
             case .lmstudio: (1_024, 1_536)
             // Custom servers expose no context-window contract. Preserve their
             // successful first requests; spend more only after explicit truncation.
             case .openaiCompatible: (700, 2_048)
-            default: (2_048, 4_096)
+            default: (700, 4_096)
             }
         var outputLimit = initialLimit
         var correction = ""

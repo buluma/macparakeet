@@ -66,14 +66,18 @@ These LLM events precede card persistence, so 699 is not a saved-card count.
 
 ## Repair and tradeoffs
 
-Use 2,048 output tokens initially and at most 4,096 after an explicit length,
-max_tokens or max_output_tokens finish. LM Studio's smaller window uses
-1,024/1,536. Custom OpenAI-compatible endpoints keep 700 initially and permit
-2,048 only after explicit truncation. This avoids breaking previously successful
-requests against an undisclosed small context window; recovery may still fail
-at the server's limit. These are bounded engineering allowances, not a claim
-that every model can finish within them. Wire fixtures cover serialization, truncation
-metadata and cumulative counters; no real-model quality claim follows.
+Preserve the 700-token initial allowance for cloud and other unknown-window
+routes, permitting 4,096 only after an explicit length, max_tokens or
+max_output_tokens finish. Provider names do not prove capacity: OpenAI routes
+also accept manual model IDs and endpoint overrides. A wire fixture demonstrates
+a schema-capable endpoint that accepts 700 but rejects a 2,048-token first request.
+Native Ollama uses 2,048/4,096 against its configured window; LM Studio uses
+1,024/1,536. Custom OpenAI-compatible endpoints use 700/2,048. This preserves
+successful first requests; recovery may still fail at an unknown server limit.
+It can cost an additional round trip when cloud output reaches 700 tokens.
+These are bounded allowances, not a claim that every model can finish within
+them. Wire fixtures cover serialization, truncation metadata and cumulative
+counters; no real-model quality claim follows.
 
 At most one provider retry changes the prompt; truncation also increases the
 allowance. Partial output is neither persisted nor replayed as instructions.
@@ -81,9 +85,11 @@ A cancellable setup loop waits 100/300/600 ms only for StoreError.busy.
 It cannot retry indefinitely or silently change the configured route.
 No new retry framework, provider, model discovery or telemetry payload is added.
 
-Larger output allowances permit higher worst-case cost/latency; the maximum is
-two requests (up to 6,144 requested output tokens; 2,560 for LM Studio and
-2,748 for custom OpenAI-compatible endpoints).
+Larger recovery allowances permit higher worst-case cost/latency. The card
+service makes at most two client requests: up to 4,796 requested output tokens
+for clouds, 6,144 for Ollama, 2,560 for LM Studio, and 2,748 for custom endpoints.
+LocalCLI has no token contract; the existing developer-only in-process provider
+may perform multiple internal generations beneath a client request.
 Input reservation can shorten the transcript sent on a retry. The card remains
 a routing hint with its existing approximately 350-token persistence budget,
 citation resolution and source freshness checks.

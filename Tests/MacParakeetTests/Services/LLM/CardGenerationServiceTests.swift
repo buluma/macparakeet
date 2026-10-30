@@ -27,7 +27,7 @@ final class CardGenerationServiceTests: XCTestCase {
         XCTAssertEqual(result.output, Self.validMeetingJSON)
         XCTAssertEqual(result.model, "schema-model")
         XCTAssertEqual(client.capturedOptions?.responseFormat, LLMService.knowledgeCardResponseFormat)
-        XCTAssertEqual(client.capturedOptions?.maxTokens, 2_048)
+        XCTAssertEqual(client.capturedOptions?.maxTokens, 700)
         let object = try XCTUnwrap(
             JSONSerialization.jsonObject(with: Data(result.output.utf8)) as? [String: Any]
         )
