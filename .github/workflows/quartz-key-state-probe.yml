@@ -5,6 +5,8 @@ on:
     paths:
       - '.github/workflows/quartz-key-state-probe.yml'
       - 'scripts/ci/quartz-key-state-probe.c'
+      - 'scripts/ci/quartz-paste-probe.m'
+      - 'Sources/MacParakeetCore/Services/System/AppGeneratedKeyboardEvents.swift'
   workflow_dispatch:
 
 permissions:
@@ -24,8 +26,15 @@ jobs:
           set -o pipefail
           sw_vers
           "$RUNNER_TEMP/quartz-key-state-probe" | tee quartz-key-state.jsonl
+      - name: Qualify native text-field paste
+        run: |
+          set -o pipefail
+          clang -Wall -Wextra -Werror -fobjc-arc -framework Cocoa -framework ApplicationServices scripts/ci/quartz-paste-probe.m -o "$RUNNER_TEMP/quartz-paste-probe"
+          "$RUNNER_TEMP/quartz-paste-probe" | tee quartz-paste.jsonl
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: quartz-key-state
-          path: quartz-key-state.jsonl
+          path: |
+            quartz-key-state.jsonl
+            quartz-paste.jsonl

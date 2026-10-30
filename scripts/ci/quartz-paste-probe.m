@@ -1,0 +1,66 @@
+// Qualifies normal native destination delivery, not Jump Desktop or physical keys.
+#import <Cocoa/Cocoa.h>
+#import <ApplicationServices/ApplicationServices.h>
+
+int main(void) {
+    @autoreleasepool {
+        if (strcmp(getenv("GITHUB_ACTIONS") ?: "", "true") ||
+            strcmp(getenv("RUNNER_ENVIRONMENT") ?: "", "github-hosted")) {
+            fprintf(stderr, "Refusing input outside a disposable GitHub-hosted runner.\n");
+            return 1;
+        }
+        if (!CGPreflightPostEventAccess()) {
+            puts("{\"result\":\"unavailable\",\"reason\":\"post_permission\"}");
+            return 0;
+        }
+        NSApplication *app = NSApplication.sharedApplication;
+        [app setActivationPolicy:NSApplicationActivationPolicyRegular];
+        NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(100, 100, 400, 160)
+            styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];
+        NSTextView *text = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, 400, 160)];
+        window.contentView = text;
+        [window makeKeyAndOrderFront:nil];
+        [window makeFirstResponder:text];
+        [app activate];
+        NSString *expected = @"quartz-session-paste-1286";
+        [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:NO block:^(NSTimer *timer) {
+            (void)timer;
+            if (!app.active || !window.keyWindow || window.firstResponder != text) {
+                puts("{\"result\":\"unavailable\",\"reason\":\"receiver_not_focused\"}");
+                exit(1);
+            }
+            [NSPasteboard.generalPasteboard clearContents];
+            [NSPasteboard.generalPasteboard setString:expected forType:NSPasteboardTypeString];
+            CGEventSourceRef source = CGEventSourceCreate(kCGEventSourceStateCombinedSessionState);
+            CGEventRef down = CGEventCreateKeyboardEvent(source, 9, true);
+            CGEventRef up = CGEventCreateKeyboardEvent(source, 9, false);
+            if (!source || !down || !up) {
+                if (down) CFRelease(down);
+                if (up) CFRelease(up);
+                if (source) CFRelease(source);
+                exit(1);
+            }
+            CGEventSetFlags(down, kCGEventFlagMaskCommand);
+            CGEventSetFlags(up, kCGEventFlagMaskCommand);
+            CGEventSetIntegerValueField(down, kCGEventSourceUserData, 0x4D505343);
+            CGEventSetIntegerValueField(up, kCGEventSourceUserData, 0x4D505343);
+            CGEventPost(kCGSessionEventTap, down);
+            CGEventPost(kCGSessionEventTap, up);
+            CFRelease(down); CFRelease(up); CFRelease(source);
+        }];
+        [NSTimer scheduledTimerWithTimeInterval:0.1 repeats:YES block:^(NSTimer *timer) {
+            if ([text.string isEqualToString:expected]) {
+                puts("{\"result\":\"native_paste_observed\",\"jump_desktop_tested\":false}");
+                [timer invalidate];
+                exit(0);
+            }
+        }];
+        [NSTimer scheduledTimerWithTimeInterval:5 repeats:NO block:^(NSTimer *timer) {
+            (void)timer;
+            puts("{\"result\":\"timeout\"}");
+            exit(1);
+        }];
+        [app run];
+        return 1;
+    }
+}

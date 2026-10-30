@@ -4,19 +4,6 @@ import CoreGraphics
 import Foundation
 import OSLog
 
-/// Marks Unicode HID events posted by streaming insertion so hotkey taps ignore them.
-public enum StreamingCursorEventMarker {
-    public static let userData: Int64 = 0x4D50_5343
-
-    public static func mark(_ event: CGEvent) {
-        event.setIntegerValueField(.eventSourceUserData, value: userData)
-    }
-
-    public static func isMarked(_ event: CGEvent) -> Bool {
-        event.getIntegerValueField(.eventSourceUserData) == userData
-    }
-}
-
 public enum StreamingCursorError: Error, Equatable {
     case eventSourceUnavailable
     case eventCreationFailed
@@ -55,27 +42,23 @@ struct CGStreamingCursorEventPosting: StreamingCursorEventPosting {
         guard AXIsProcessTrusted() else {
             throw StreamingCursorError.eventSourceUnavailable
         }
-        guard let source = CGEventSource(stateID: .hidSystemState) else {
+        guard let source = AppGeneratedKeyboardEvents.makeSource() else {
             throw StreamingCursorError.eventSourceUnavailable
         }
         let units = Array(text.utf16)
         guard !units.isEmpty else { return }
         var mutable = units
 
-        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
-            let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false)
+        guard let keyDown = AppGeneratedKeyboardEvents.makeEvent(source: source, keyCode: 0, keyDown: true, flags: []),
+            let keyUp = AppGeneratedKeyboardEvents.makeEvent(source: source, keyCode: 0, keyDown: false, flags: [])
         else {
             throw StreamingCursorError.eventCreationFailed
         }
 
-        keyDown.flags = []
-        keyUp.flags = []
-        StreamingCursorEventMarker.mark(keyDown)
-        StreamingCursorEventMarker.mark(keyUp)
         keyDown.keyboardSetUnicodeString(stringLength: mutable.count, unicodeString: &mutable)
         keyUp.keyboardSetUnicodeString(stringLength: mutable.count, unicodeString: &mutable)
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
+        keyDown.post(tap: AppGeneratedKeyboardEvents.postingLocation)
+        keyUp.post(tap: AppGeneratedKeyboardEvents.postingLocation)
     }
 }
 

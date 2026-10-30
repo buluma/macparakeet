@@ -135,6 +135,24 @@ flags, so another shortcut's keys reach the manager that owns a held take.
 - The optional slots participate in onboarding edit/reset conflict checks, but
   onboarding continues to teach and rehearse the primary pair only.
 
+### Generated input and bare-Fn admission
+
+- App-generated paste, copy/replacement, post-paste actions, and Unicode
+  insertion carry the application marker and enter at the session posting
+  point. Every hotkey listener ignores them before swallowing or processing
+  gesture/release state. Third-party unmarked input keeps its existing handling.
+- Bare Fn reconciles held ordinary keys from HID state, so session-only stale
+  output cannot block a fresh gesture, even after process or listener restart.
+  Real pre-held keys/modifiers, physical typing, and contaminated-gesture
+  cancellation retain their existing policy.
+- An own synthetic key-up cannot override a genuinely held key. Unmarked
+  observed releases retain the existing override for legacy/upstream HID
+  contamination; tap recovery clears this evidence when events may be missed.
+  This does not promise automatic repair of arbitrary stale HID state and does
+  not post corrective releases or apply held-key timeouts.
+- Custom-trigger synchronization, peer-claim recovery, and modifier-flag
+  interpretation retain their existing combined-session/event semantics.
+
 ## Non-stable fields
 
 - Settings layout and copy: the Additional shortcuts disclosure, its helper
