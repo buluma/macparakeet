@@ -72,15 +72,17 @@ private actor VoiceControlTestAudio: AudioProcessorProtocol {
 private actor VoiceControlTestSTT: STTTranscribing {
     var jobs: [STTJobKind] = []
     var frames: [Int64] = []
+    var paths: [String] = []
     var shouldWait = false
     var waitsOnlyOnce = false
     var waiting: CheckedContinuation<Void, Never>?
     func setWait(onlyOnce: Bool = false) { shouldWait = true; waitsOnlyOnce = onlyOnce }
-    func release() { waiting?.resume(); waiting = nil }
+    func release() { shouldWait = false; waiting?.resume(); waiting = nil }
     func transcribe(audioPath: String, job: STTJobKind, onProgress: (@Sendable (Int, Int) -> Void)?) async throws
         -> STTResult
     {
         jobs.append(job)
+        paths.append(audioPath)
         frames.append((try? AVAudioFile(forReading: URL(fileURLWithPath: audioPath)).length) ?? -1)
         if shouldWait {
             if waitsOnlyOnce { shouldWait = false }
@@ -167,12 +169,15 @@ extension VoiceControlSpeechTests {
         }
         try await session.begin(handsFree: false)
         let commit = Task { await session.commit() }
-        for _ in 0..<10_000 {
-            if await stt.waiting != nil { break }
-            await Task.yield()
-        }
-        let didStart = await stt.waiting != nil
+        let didStart = await waitUntil { await stt.waiting != nil }
         XCTAssertTrue(didStart)
+        guard didStart else {
+            await stt.release()
+            await session.cancel()
+            await commit.value
+            _ = await collector.value
+            return
+        }
         await session.discardPendingUtterance()
         await stt.release()
         await commit.value
@@ -318,11 +323,17 @@ extension VoiceControlSpeechTests {
         for _ in 0..<9 { await audio.emit(Self.silence) }
     }
 
-    private func waitForJobs(_ stt: VoiceControlTestSTT, count: Int) async {
-        for _ in 0..<10_000 {
-            if await stt.jobs.count >= count { return }
-            await Task.yield()
+    private func waitUntil(_ condition: @Sendable () async -> Bool) async -> Bool {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while !(await condition()) {
+            guard ContinuousClock.now < deadline else { return false }
+            do {
+                try await Task.sleep(for: .milliseconds(1))
+            } catch {
+                return false
+            }
         }
+        return true
     }
 
     func testSpeechResumingBeforePendingFinalMergesEarlierWordsIntoOneCommand() async throws {
@@ -341,23 +352,40 @@ extension VoiceControlSpeechTests {
         }
         try await session.begin(handsFree: true)
         await speakThenPause(audio)
-        for _ in 0..<10_000 {
-            if await stt.waiting != nil { break }
-            await Task.yield()
-        }
-        let firstStarted = await stt.waiting != nil
+        let firstStarted = await waitUntil { await stt.waiting != nil }
         XCTAssertTrue(firstStarted, "The first segment reached final STT before speech resumed")
-        await speakThenPause(audio)
-        await waitForJobs(stt, count: 2)
-        await stt.release()
-        for _ in 0..<10_000 {
-            if await delivered.count >= 1 { break }
-            await Task.yield()
+        guard firstStarted else {
+            await stt.release()
+            await session.cancel()
+            await collector.value
+            return
         }
-        // Give the released first segment time to (wrongly) surface before stopping.
-        for _ in 0..<1000 { await Task.yield() }
+        await speakThenPause(audio)
+        let secondStarted = await waitUntil { await stt.jobs.count >= 2 }
+        XCTAssertTrue(secondStarted, "The merged segment reached final STT before releasing the first result")
+        guard secondStarted else {
+            await stt.release()
+            await session.cancel()
+            await collector.value
+            return
+        }
+        await stt.release()
+        let transcriptDelivered = await waitUntil { await delivered.count >= 1 }
+        XCTAssertTrue(transcriptDelivered, "The merged command was delivered before stopping")
+        guard transcriptDelivered else {
+            await session.cancel()
+            await collector.value
+            return
+        }
+        // Transcription deletes its segment in defer, after accepting or rejecting
+        // the result. Drain both finals before Stop can mask a stale transcript.
+        let finalsFinished = await waitUntil {
+            await stt.paths.allSatisfy { !FileManager.default.fileExists(atPath: $0) }
+        }
+        XCTAssertTrue(finalsFinished, "Both final results were handled before stopping")
         await session.cancel()
         await collector.value
+        guard finalsFinished else { return }
         let frames = await stt.frames
         XCTAssertEqual(frames.count, 2)
         XCTAssertEqual(frames.first, 17_600)
@@ -389,17 +417,19 @@ extension VoiceControlSpeechTests {
         }
         try await session.begin(handsFree: true)
         await speakThenPause(audio)
-        for _ in 0..<10_000 {
-            if await delivered.count >= 1 { break }
-            await Task.yield()
+        let firstDelivered = await waitUntil { await delivered.count >= 1 }
+        XCTAssertTrue(firstDelivered, "The first command was delivered before the next utterance")
+        guard firstDelivered else {
+            await session.cancel()
+            await collector.value
+            return
         }
         await speakThenPause(audio)
-        for _ in 0..<10_000 {
-            if await delivered.count >= 2 { break }
-            await Task.yield()
-        }
+        let secondDelivered = await waitUntil { await delivered.count >= 2 }
+        XCTAssertTrue(secondDelivered, "Both commands were delivered before stopping")
         await session.cancel()
         await collector.value
+        guard secondDelivered else { return }
         let frames = await stt.frames
         XCTAssertEqual(frames, [17_600, 17_600], "A delivered command is never merged into the next one")
         let measured = await delivered.metrics
