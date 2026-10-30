@@ -49,6 +49,81 @@ final class LLMHTTPAdapterTests: XCTestCase {
         AdapterRequestURLProtocol.handler = nil
     }
 
+    func testKnowledgeCardRecoveryUsesOpenAIWireLimitsFinishReasonAndUsage() async throws {
+        var requestCount = 0
+        AdapterRequestURLProtocol.handler = { request in
+            let body = try self.jsonBody(from: request)
+            let limit = try XCTUnwrap(body["max_tokens"] as? Int)
+            requestCount += 1
+            XCTAssertEqual(limit, requestCount == 1 ? 2_048 : 4_096)
+            XCTAssertNotNil(body["response_format"])
+            let output =
+                requestCount == 1
+                ? "{\"synopsis\":"
+                : """
+                {"synopsis":"Synthetic release review.","topics":[],"decisions":[],"actions":[]}
+                """
+            let response: [String: Any] = [
+                "model": "gpt-4.1",
+                "choices": [
+                    [
+                        "message": ["role": "assistant", "content": output],
+                        "finish_reason": requestCount == 1 ? "length" : "stop",
+                    ]
+                ],
+                "usage": ["prompt_tokens": 100, "completion_tokens": requestCount == 1 ? 2_048 : 900],
+            ]
+            return (self.okResponse(for: request), try JSONSerialization.data(withJSONObject: response))
+        }
+        let service = LLMService(
+            client: LLMClient(session: session),
+            contextResolver: StaticLLMExecutionContextResolver(
+                context: LLMExecutionContext(providerConfig: .openai(apiKey: "test", model: "gpt-4.1"))))
+
+        let result = try await service.generateKnowledgeCard(transcript: "Synthetic release review.", source: .file)
+
+        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(result.stopReason, "stop")
+        XCTAssertEqual(result.usage?.completionTokens, 2_948)
+    }
+
+    func testOllamaKnowledgeCardActuallySendsBoundedOptionsWithoutChangingGenericRequests() async throws {
+        var requestCount = 0
+        AdapterRequestURLProtocol.handler = { request in
+            requestCount += 1
+            let body = try self.jsonBody(from: request)
+            XCTAssertEqual(body["think"] as? Bool, false)
+            let options = try XCTUnwrap(body["options"] as? [String: Any])
+            XCTAssertEqual(options["num_ctx"] as? Int, 8_192)
+            XCTAssertEqual(options["num_predict"] as? Int, 2_048)
+            XCTAssertEqual(options["temperature"] as? Double, 0.1)
+            let output = """
+                {"synopsis":"Synthetic release review.","topics":[],"decisions":[],"actions":[]}
+                """
+            let response: [String: Any] = [
+                "model": "fixture-model", "message": ["content": output],
+                "done": true, "done_reason": "stop", "prompt_eval_count": 100, "eval_count": 800,
+            ]
+            return (self.okResponse(for: request), try JSONSerialization.data(withJSONObject: response))
+        }
+        let config = LLMProviderConfig.ollama(model: "fixture-model")
+        let service = LLMService(
+            client: LLMClient(session: session),
+            contextResolver: StaticLLMExecutionContextResolver(context: LLMExecutionContext(providerConfig: config)))
+
+        let result = try await service.generateKnowledgeCard(transcript: "Synthetic release review.", source: .file)
+
+        XCTAssertEqual(requestCount, 1)
+        XCTAssertEqual(result.usage?.completionTokens, 800)
+        let genericRequest = try ollamaAdapter.buildRequest(
+            messages: [ChatMessage(role: .user, content: "Synthetic generic request")],
+            config: config, options: ChatCompletionOptions(temperature: 0.1, maxTokens: 700), stream: false)
+        let genericBody = try jsonBody(from: genericRequest)
+        let genericOptions = try XCTUnwrap(genericBody["options"] as? [String: Any])
+        XCTAssertNil(genericOptions["num_predict"])
+        XCTAssertNil(genericOptions["temperature"])
+    }
+
     func testOpenCodeServicePreservesConversationIdentityForNonstreamingChat() async throws {
         let conversationID = UUID()
         var sessionIDs: [String?] = []

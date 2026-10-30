@@ -140,3 +140,30 @@ coordinator wraps or renames this service's call site, update
 [Split and Transcribe](meeting-splitting.md) and this document in the same
 change, and record any newly discovered exactly-once or hook-ordering
 requirement here rather than silently working around it.
+
+### Bounded knowledge-card recovery
+
+The shared card generator retains its source/speaker/correction fingerprint
+checks and atomic conditional save. Failure or cancellation leaves a previous
+valid card untouched; changed or deleted sources cannot receive the late
+result. Fresh cards still skip generation.
+
+The LLM stage waits only for temporary AI configuration contention: four reads
+at most, with cancellable waits of 100, 300 and 600 ms. It never writes settings.
+After resolving the analysis route, at most two provider requests use that
+same context. The output allowance is 2,048 tokens initially, with 4,096 on
+an explicit output-limit finish reason; LM Studio uses 1,024/1,536 to leave
+input room in its smaller window. Input is budgeted with that output reserve,
+including Ollama's native 8,192-token window. LocalCLI does not expose a token
+limit or usage and remains unknown where unsupported.
+
+A malformed or empty-synopsis response gets one fresh request with corrective
+JSON instructions; partial model output is not replayed. An explicit truncated
+finish is rejected even when its JSON parses. Timeouts, rate limits, provider
+rejections (including unsupported schemas) and cancellation are terminal rather
+than blind replays. Generic formatter/chat/prompt retry behavior is unchanged.
+The stored card retains its approximately 350-token text budget. These recovery
+changes do not invalidate fresh cards or change schema/prompt provenance versions.
+
+Tests: KnowledgeCardRecoveryTests, CardGenerationServiceTests, LLMServiceTests,
+LLMHTTPAdapterTests, LLMConfigStoreTests.

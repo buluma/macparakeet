@@ -27,7 +27,7 @@ final class CardGenerationServiceTests: XCTestCase {
         XCTAssertEqual(result.output, Self.validMeetingJSON)
         XCTAssertEqual(result.model, "schema-model")
         XCTAssertEqual(client.capturedOptions?.responseFormat, LLMService.knowledgeCardResponseFormat)
-        XCTAssertEqual(client.capturedOptions?.maxTokens, 700)
+        XCTAssertEqual(client.capturedOptions?.maxTokens, 2_048)
         let object = try XCTUnwrap(
             JSONSerialization.jsonObject(with: Data(result.output.utf8)) as? [String: Any]
         )
@@ -210,6 +210,48 @@ final class CardGenerationServiceTests: XCTestCase {
         XCTAssertEqual(operation["outcome"], "failure")
         XCTAssertEqual(operation["error_type"], "LLMError.invalidResponse")
         XCTAssertEqual(operation["retry_count"], "1")
+    }
+
+    func testFailedGenerationPreservesOldCardForProviderAndValidationFailures() async throws {
+        let errors: [Error?] = [nil, LLMError.requestTimedOut, LLMError.rateLimited, CancellationError()]
+        for error in errors {
+            let fixture = try Fixture(source: .meeting)
+            let old = fixture.oldCard()
+            try fixture.cards.save(old)
+            let client = MockLLMClient()
+            client.responseContent = "not json"
+            client.chatCompletionError = error
+            let provider = Self.service(client: client, config: .openai(apiKey: "test"))
+
+            await XCTAssertThrowsErrorAsync {
+                _ = try await fixture.service(provider: provider).generate(
+                    transcriptionId: old.transcriptionId, force: true)
+            }
+
+            XCTAssertEqual(try fixture.cards.fetch(transcriptionId: old.transcriptionId), old)
+        }
+    }
+
+    func testDeletionDuringProviderAwaitNeverRecreatesTranscriptOrCard() async throws {
+        let fixture = try Fixture(source: .meeting)
+        let provider = StubCardCompletionProvider(response: Self.validMeetingJSON) {
+            try fixture.transcriptions.delete(id: fixture.transcription.id)
+        }
+
+        await XCTAssertThrowsErrorAsync {
+            _ = try await fixture.service(provider: provider).generate(
+                transcriptionId: fixture.transcription.id, force: true)
+        }
+
+        XCTAssertNil(try fixture.transcriptions.fetch(id: fixture.transcription.id))
+        XCTAssertNil(try fixture.cards.fetch(transcriptionId: fixture.transcription.id))
+    }
+
+    private static func service(client: MockLLMClient, config: LLMProviderConfig) -> LLMService {
+        LLMService(
+            client: client,
+            contextResolver: StaticLLMExecutionContextResolver(
+                context: LLMExecutionContext(providerConfig: config)))
     }
 
     func testLLMServiceBoundsKnowledgeCardInputToProviderContext() async throws {
@@ -600,7 +642,7 @@ final class CardGenerationServiceTests: XCTestCase {
     }
 }
 
-private final class CardTelemetrySpy: TelemetryServiceProtocol, @unchecked Sendable {
+final class CardTelemetrySpy: TelemetryServiceProtocol, @unchecked Sendable {
     private let lock = NSLock()
     private var events: [TelemetryEventSpec] = []
 
