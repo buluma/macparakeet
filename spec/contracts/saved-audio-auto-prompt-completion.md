@@ -153,7 +153,10 @@ at most, with cancellable waits of 100, 300 and 600 ms. It never writes settings
 After resolving the analysis route, at most two provider requests use that
 same context. The output allowance is 2,048 tokens initially, with 4,096 on
 an explicit output-limit finish reason; LM Studio uses 1,024/1,536 to leave
-input room in its smaller window. Input is budgeted with that output reserve,
+input room in its smaller window. Custom OpenAI-compatible endpoints retain
+700 initially and permit 2,048 only after explicit truncation, since their
+model context window is unknown. Recovery can still fail at that endpoint's
+limit; no context capacity is inferred. Input is budgeted with the output reserve,
 including Ollama's native 8,192-token window. LocalCLI does not expose a token
 limit or usage and remains unknown where unsupported.
 

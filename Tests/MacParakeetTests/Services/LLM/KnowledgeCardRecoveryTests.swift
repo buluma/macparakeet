@@ -39,6 +39,43 @@ final class KnowledgeCardRecoveryTests: XCTestCase {
         }
     }
 
+    func testCustomEndpointKeepsInitialAllowanceAndOnlyRaisesItAfterTruncation() async throws {
+        let config = LLMProviderConfig.openaiCompatible(
+            model: "small-window", baseURL: URL(string: "http://127.0.0.1:12345/v1")!)
+        for truncated in [false, true] {
+            let client = MockLLMClient()
+            client.responseContent = Self.validMeetingJSON
+            client.responseFinishReasons = truncated ? ["length", "stop"] : ["stop"]
+            let service = Self.service(client: client, config: config)
+
+            _ = try await service.generateKnowledgeCard(
+                transcript: String(repeating: "synthetic ", count: 1_100), source: .file)
+
+            XCTAssertEqual(client.capturedOptionBatches.map(\.maxTokens), truncated ? [700, 2_048] : [700])
+        }
+    }
+
+    func testCancellationBeforeValidProviderReturnEmitsCancelledInsteadOfSuccess() async throws {
+        let telemetry = CardTelemetrySpy()
+        Telemetry.configure(telemetry)
+        let client = MockLLMClient()
+        client.responseContent = Self.validMeetingJSON
+        client.onChatCompletion = { withUnsafeCurrentTask { $0?.cancel() } }
+        let service = Self.service(client: client, config: .openai(apiKey: "test"))
+        let generation = Task {
+            try await service.generateKnowledgeCard(transcript: "Synthetic transcript", source: .meeting)
+        }
+
+        do {
+            _ = try await generation.value
+            XCTFail("Expected cancellation despite a valid response")
+        } catch is CancellationError {}
+
+        XCTAssertEqual(client.chatCompletionCallCount, 1)
+        XCTAssertEqual(telemetry.llmOperationProps.count, 1)
+        XCTAssertEqual(telemetry.llmOperationProps.first?["outcome"], "cancelled")
+    }
+
     func testTruncatedButParseableJSONCannotBecomeSuccessAndStopsAfterTwoRequests() async throws {
         let telemetry = CardTelemetrySpy()
         Telemetry.configure(telemetry)

@@ -68,8 +68,11 @@ These LLM events precede card persistence, so 699 is not a saved-card count.
 
 Use 2,048 output tokens initially and at most 4,096 after an explicit length,
 max_tokens or max_output_tokens finish. LM Studio's smaller window uses
-1,024/1,536. These are bounded engineering allowances, not a claim that every
-model can finish within them. Wire fixtures cover serialization, truncation
+1,024/1,536. Custom OpenAI-compatible endpoints keep 700 initially and permit
+2,048 only after explicit truncation. This avoids breaking previously successful
+requests against an undisclosed small context window; recovery may still fail
+at the server's limit. These are bounded engineering allowances, not a claim
+that every model can finish within them. Wire fixtures cover serialization, truncation
 metadata and cumulative counters; no real-model quality claim follows.
 
 At most one provider retry changes the prompt; truncation also increases the
@@ -79,7 +82,8 @@ It cannot retry indefinitely or silently change the configured route.
 No new retry framework, provider, model discovery or telemetry payload is added.
 
 Larger output allowances permit higher worst-case cost/latency; the maximum is
-two requests (up to 6,144 requested output tokens, or 2,560 for LM Studio).
+two requests (up to 6,144 requested output tokens; 2,560 for LM Studio and
+2,748 for custom OpenAI-compatible endpoints).
 Input reservation can shorten the transcript sent on a retry. The card remains
 a routing hint with its existing approximately 350-token persistence budget,
 citation resolution and source freshness checks.
@@ -101,8 +105,10 @@ mutation, speaker correction, current-card skip and atomic-save tests remain.
 Local Swift syntax parsing and diff checks passed. The brief requests GitHub
 PR CI instead of local CI/full suites; no local Swift build or suite was run.
 no-mistakes and Unblocked executables are unavailable. Independent correctness
-and maintainability review found no introduced blocking defect; validation
-parity and test organization improvements were applied. Local Greptile and
+and maintainability review converged after correcting assertion-helper visibility
+and an Ollama response fixture, sharing the typed validator and separating tests.
+Hosted review also prompted preserving the custom-endpoint initial budget and
+adding cancellation-after-response and repository-deletion regressions. Local Greptile and
 exact-head GitHub CI evidence belong in the PR. No production deployment or
 user-data deletion is part of this repair.
 

@@ -20,6 +20,7 @@ final class MockLLMClient: LLMClientProtocol, @unchecked Sendable {
     var responseUsages: [TokenUsage?] = []
     var responseModel = "mock-model"
     var responseUsage: TokenUsage?
+    var onChatCompletion: (@Sendable () -> Void)?
     var streamTokens: [String]?
     var testConnectionError: Error?
     var testConnectionDelayNs: UInt64 = 0
@@ -41,6 +42,7 @@ final class MockLLMClient: LLMClientProtocol, @unchecked Sendable {
         capturedOptionBatches.append(options)
         if let chatCompletionError { throw chatCompletionError }
         let content = responseContents.isEmpty ? responseContent : responseContents.removeFirst()
+        onChatCompletion?()
         return ChatCompletionResponse(
             content: content,
             reasoningContent: responseReasoningContent,
