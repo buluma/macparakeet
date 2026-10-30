@@ -191,8 +191,9 @@ Legacy default installs using `Fn+Space` hands-free plus `Fn` push-to-talk migra
 - The built-in bare-`Fn` gesture uses a listen-only `CGEvent` tap: Fn and every
   observed cancellation event pass through unchanged. Other configurable
   hotkeys retain their established active-tap behavior.
-- Built-in Fn is admitted only when an HID-state snapshot shows no
-  pre-held non-Fn modifier or ordinary physical key. A key the tap has seen
+- Built-in Fn is admitted only when combined-session flags show no non-Fn
+  modifier and an HID-state snapshot shows no pre-held ordinary physical key.
+  A key the tap has seen
   released since it last saw that key go down no longer counts, because an app
   that posts a keyDown without its keyUp can leave the snapshot reporting the
   key held indefinitely when posted upstream at the HID entry point.

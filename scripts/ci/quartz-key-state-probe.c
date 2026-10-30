@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
     printf("{\"post_access\":%s}\n", CGPreflightPostEventAccess() ? "true" : "false");
     if (!CGPreflightPostEventAccess()) {
         puts("{\"result\":\"unavailable\",\"reason\":\"event_post_permission\"}");
-        return 0;
+        return 1;
     }
     if (argc == 3 && strcmp(argv[1], "--orphan-producer") == 0) {
         activeSource = CGEventSourceCreate((CGEventSourceStateID)atoi(argv[2]));
@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
         CGEventMaskBit(kCGEventKeyDown) | CGEventMaskBit(kCGEventKeyUp), observe, NULL);
     if (!tap) {
         puts("{\"result\":\"unavailable\",\"reason\":\"delivery_witness_permission\"}");
-        return 0;
+        return 1;
     }
     CFRunLoopSourceRef tapSource = CFMachPortCreateRunLoopSource(NULL, tap, 0);
     if (!tapSource) { CFRelease(tap); return 1; }
