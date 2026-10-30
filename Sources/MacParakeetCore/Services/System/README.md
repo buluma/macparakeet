@@ -73,6 +73,10 @@ explicit per-process routing are separate surfaces.
 Streaming interruption also replays at the session entry point, alongside the
 flushed text. Preserve the original input's metadata without applying our
 marker: moving an intercepted session event upstream would contaminate HID.
+If the interrupt flush fails, release the user's input promptly and stop this
+insertion permanently. Do not retry after the input may have moved the cursor
+or focus. Report `partialInsert` even with no committed text so the coordinator
+offers clipboard recovery without automatically pasting into the new target.
 
 Bare-Fn admission reads HID keys; custom-trigger and peer recovery retain
 session semantics. Older app versions or other software can still leave HID

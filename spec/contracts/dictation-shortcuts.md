@@ -159,9 +159,13 @@ flags, so another shortcut's keys reach the manager that owns a held take.
 - Custom-trigger synchronization, peer-claim recovery, and modifier-flag
   interpretation retain their existing combined-session/event semantics.
 - Streaming interruption replays the intercepted event at the session entry
-  point after posting the remaining text there. The copy preserves the original
-  metadata and is not marked as application-generated output. It must not be
+  point after attempting to flush the remaining text there. The copy preserves
+  the original metadata and is not marked as application-generated output. It must not be
   promoted upstream into HID state.
+- If that flush fails, user input resumes and this insertion must not post any
+  remaining text afterward, including through retry or cancellation cleanup.
+  Report stopped insertion and offer clipboard recovery without automatic
+  paste, even when the failure occurred before any text was inserted.
 
 ## Non-stable fields
 

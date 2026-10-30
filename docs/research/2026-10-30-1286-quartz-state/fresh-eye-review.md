@@ -30,8 +30,8 @@ change during this clarification.
 ## Opus 5.5 review and disposition
 
 Claude Code 2.1.311 ran in noninteractive mode with model
-`claude-opus-5-5`, no fallback, and no enabled tools. The initial review and a
-follow-up both completed successfully; assistant response metadata and the
+`claude-opus-5-5`, no fallback, and no enabled tools. The initial review and follow-up reviews
+completed successfully; assistant response metadata and the
 reported canonical model confirmed Opus 5.5 on the first-party provider.
 Session: `e1d878ea-a68e-4039-b2e4-ab9c3493ea3c`. The bundle contained the diff,
 relevant source/tests and evidence, not user audio, transcripts or credentials.
@@ -70,6 +70,7 @@ experiments address the concrete question without a new tracking framework.
 - [Developer probes extracting the old marker](https://github.com/moona3k/macparakeet/pull/1293#discussion_r4427897023): both now compile the shared helper directly. Verified in source; thread resolved.
 - [Unavailable native probe could pass](https://github.com/moona3k/macparakeet/pull/1293#discussion_r4428676721): both permission failure paths now exit nonzero. Verified in source; thread resolved and acknowledged by the bot.
 - [Modifier source misstated in the spec](https://github.com/moona3k/macparakeet/pull/1293#discussion_r4428676731): the spec now distinguishes combined-session modifier flags from HID ordinary-key state. Verified against code; thread resolved and acknowledged by the bot.
+- [Retry after failed interruption flush](https://github.com/moona3k/macparakeet/pull/1293#pullrequestreview-5719482607): CodeRabbit identified a pre-existing ordering defect at the touched replay boundary. A transient flush failure could let the user's click through, then retry text at the changed cursor or destination. Independent review confirmed it. A terminal failure latch under the existing playback lock now prevents later posts through normal, error, and cancellation drains. User input is not retained. `partialInsert` suppresses automatic paste even before the first committed chunk; recovery copy is worded without assuming any text landed. Regression cases use a one-time failure that would succeed on retry and cover zero/one committed chunks plus real task cancellation. The zero-commit error path stops posting under the playback lock, quiesces the tap without holding that lock, then chooses the recovery error; regressions cover interruption during the initial failure and during tap teardown. This prevents an in-flight callback from turning a previously selected availability error into a late automatic paste. Opus and the independent adversarial reviewer both reviewed the final teardown ordering and found no blockers. Five new regression cases cover the failure paths; their execution is delegated to GitHub CI.
 
 ## Native evidence replay
 

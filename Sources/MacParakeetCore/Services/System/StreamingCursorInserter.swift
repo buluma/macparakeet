@@ -27,6 +27,7 @@ protocol StreamingCursorInterruptListening: Sendable {
 }
 
 protocol StreamingCursorInterruptToken: Sendable {
+    /// Idempotently stop listening and wait for any in-flight callback to finish.
     func invalidate()
 }
 
@@ -134,8 +135,8 @@ private final class HeadInsertStreamingCursorInterruptToken: StreamingCursorInte
         lock.unlock()
         if first {
             onInterrupt()
-            // Queue the intercepted input behind the remainder at the same
-            // session entry point. Replaying upstream would contaminate HID.
+            // Queue input behind any text the flush posted, even if it failed.
+            // Use the session entry point; replaying upstream contaminates HID.
             guard CGStreamingCursorEventPosting.replayInterceptedInput(event) else {
                 return Unmanaged.passUnretained(event)
             }
@@ -196,8 +197,11 @@ public final class StreamingCursorInserter: StreamingCursorInserting, @unchecked
             playback.interruptAndDrain()
             return
         } catch {
-            if playback.committedCount == 0 {
-                throw error
+            if playback.stopIfUncommitted() {
+                // Do not hold playback's lock while waiting for the tap. An
+                // in-flight callback may still record the user's interruption.
+                invalidateInterruptTap(token)
+                throw playback.isInterrupted ? StreamingCursorError.partialInsert : error
             }
             do {
                 try playback.drainRemaining(soft: false)
@@ -230,6 +234,7 @@ private final class StreamingCursorPlayback: @unchecked Sendable {
     private let lock = NSRecursiveLock()
     private var remaining: [String]
     private var interrupted = false
+    private var postingStopped = false
     private var committed = 0
 
     init(posting: any StreamingCursorEventPosting, remaining: [String]) {
@@ -249,6 +254,15 @@ private final class StreamingCursorPlayback: @unchecked Sendable {
         return committed
     }
 
+    /// Stop pending posts before error handling waits for the interrupt tap.
+    func stopIfUncommitted() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard committed == 0 else { return false }
+        postingStopped = true
+        return true
+    }
+
     func interruptAndDrain() {
         lock.lock()
         defer { lock.unlock() }
@@ -259,7 +273,7 @@ private final class StreamingCursorPlayback: @unchecked Sendable {
     func playIfCurrent(_ expected: String) throws {
         lock.lock()
         defer { lock.unlock() }
-        guard !interrupted, remaining.first == expected else { return }
+        guard !interrupted, !postingStopped, remaining.first == expected else { return }
         remaining.removeFirst()
         do {
             try posting.typeUnicode(expected)
@@ -277,6 +291,10 @@ private final class StreamingCursorPlayback: @unchecked Sendable {
     }
 
     private func drainLocked(soft: Bool) throws {
+        // The user's key/click resumes after the interrupt callback. Once its
+        // flush fails, retrying here could type into a different cursor or app.
+        // partialInsert also prevents the caller's automatic full-paste fallback.
+        guard !postingStopped else { throw StreamingCursorError.partialInsert }
         while let chunk = remaining.first {
             remaining.removeFirst()
             guard !chunk.isEmpty else { continue }
@@ -285,7 +303,10 @@ private final class StreamingCursorPlayback: @unchecked Sendable {
                 committed += 1
             } catch {
                 remaining.insert(chunk, at: 0)
-                if soft { return }
+                if soft {
+                    postingStopped = true
+                    return
+                }
                 throw error
             }
         }
