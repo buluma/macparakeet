@@ -1,0 +1,31 @@
+name: Quartz key-state probe
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/quartz-key-state-probe.yml'
+      - 'scripts/ci/quartz-key-state-probe.c'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Disposable macOS input-state experiment
+    runs-on: macos-14
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build standalone probe
+        run: clang -Wall -Wextra -Werror -framework ApplicationServices -framework CoreGraphics scripts/ci/quartz-key-state-probe.c -o "$RUNNER_TEMP/quartz-key-state-probe"
+      - name: Observe synthetic key state
+        run: |
+          set -o pipefail
+          sw_vers
+          "$RUNNER_TEMP/quartz-key-state-probe" | tee quartz-key-state.jsonl
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: quartz-key-state
+          path: quartz-key-state.jsonl
