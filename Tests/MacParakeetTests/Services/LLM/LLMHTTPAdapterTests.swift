@@ -101,7 +101,7 @@ final class LLMHTTPAdapterTests: XCTestCase {
                 {"synopsis":"Synthetic release review.","topics":[],"decisions":[],"actions":[]}
                 """
             let response: [String: Any] = [
-                "model": "fixture-model", "message": ["content": output],
+                "model": "fixture-model", "message": ["role": "assistant", "content": output],
                 "done": true, "done_reason": "stop", "prompt_eval_count": 100, "eval_count": 800,
             ]
             return (self.okResponse(for: request), try JSONSerialization.data(withJSONObject: response))

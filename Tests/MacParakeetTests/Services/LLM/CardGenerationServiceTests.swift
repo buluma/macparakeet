@@ -851,7 +851,7 @@ private final class Fixture {
     }
 }
 
-private func XCTAssertThrowsErrorAsync(
+func XCTAssertThrowsErrorAsync(
     _ expression: () async throws -> Void,
     file: StaticString = #filePath,
     line: UInt = #line

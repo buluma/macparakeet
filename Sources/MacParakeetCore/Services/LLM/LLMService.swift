@@ -665,40 +665,13 @@ public final class LLMService: LLMServiceProtocol, Sendable {
     }
 
     private static func isValidKnowledgeCardJSON(_ output: String) -> Bool {
-        guard let data = output.data(using: .utf8),
-            // Use the persistence decoder too: NSNumber booleans can otherwise
-            // pass JSONSerialization's Int bridge for citation timestamps.
-            (try? JSONDecoder().decode(CardDraft.self, from: data)) != nil,
-            let object = try? JSONSerialization.jsonObject(with: data),
-            let card = object as? [String: Any],
-            Set(["synopsis", "topics", "decisions", "actions"]).isSubset(of: Set(card.keys)),
-            let synopsis = card["synopsis"] as? String,
-            !synopsis.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-            let topics = card["topics"] as? [Any],
-            topics.allSatisfy({ $0 is String }),
-            let decisions = card["decisions"] as? [Any],
-            decisions.allSatisfy({ isValidCitationObject($0, includesOwner: false) }),
-            let actions = card["actions"] as? [Any],
-            actions.allSatisfy({ isValidCitationObject($0, includesOwner: true) })
-        else {
-            return false
-        }
-        return true
-    }
-
-    private static func isValidCitationObject(_ value: Any, includesOwner: Bool) -> Bool {
-        guard let item = value as? [String: Any] else { return false }
-        let requiredKeys: Set<String> = ["text", "quote", "startMs", "endMs"]
-        guard requiredKeys.isSubset(of: Set(item.keys)),
-            item["text"] is String,
-            item["quote"] is String,
-            item["startMs"] is Int,
-            item["endMs"] is Int
-        else {
-            return false
-        }
-        guard includesOwner, let owner = item["owner"] else { return true }
-        return owner is String || owner is NSNull
+        // Share the persistence decoder so JSON booleans cannot bridge to Int
+        // timestamps and produce success before the later save rejects them.
+        guard let draft = try? JSONDecoder().decode(CardDraft.self, from: Data(output.utf8)),
+            !draft.synopsis.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return false }
+        return draft.decisions.allSatisfy { $0.startMs != nil && $0.endMs != nil }
+            && draft.actions.allSatisfy { $0.startMs != nil && $0.endMs != nil }
     }
 
     public func chat(
