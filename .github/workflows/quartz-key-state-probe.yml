@@ -42,9 +42,28 @@ jobs:
           </dict></plist>
           PLIST
           clang -Wall -Wextra -Werror -fobjc-arc -framework Cocoa -framework ApplicationServices scripts/ci/quartz-paste-probe.m -o "$probe_app/Contents/MacOS/QuartzPasteProbe"
-          open -W -n "$probe_app" --stdout "$PWD/quartz-paste.jsonl" --stderr "$PWD/quartz-paste.stderr" --env GITHUB_ACTIONS=true --env RUNNER_ENVIRONMENT=github-hosted
-          cat quartz-paste.jsonl quartz-paste.stderr
-          python3 -c 'import json; assert any(json.loads(line).get("result") == "native_paste_observed" for line in open("quartz-paste.jsonl")), "native paste was not observed"'
+          open -n "$probe_app" --stdout "$PWD/quartz-paste.jsonl" --stderr "$PWD/quartz-paste.stderr" --env GITHUB_ACTIONS=true --env RUNNER_ENVIRONMENT=github-hosted
+          python3 - "$probe_app/Contents/MacOS/QuartzPasteProbe" <<'PY'
+          import json, pathlib, subprocess, sys, time
+          output = pathlib.Path("quartz-paste.jsonl")
+          deadline = time.monotonic() + 20
+          posted = False
+          while time.monotonic() < deadline:
+              lines = output.read_text().splitlines() if output.exists() else []
+              results = [json.loads(line).get("result") for line in lines]
+              if "receiver_ready" in results and not posted:
+                  subprocess.run([sys.argv[1], "--post"], check=True)
+                  posted = True
+              if "native_paste_observed" in results:
+                  print(output.read_text())
+                  break
+              if "unavailable" in results or "paste_delivery_timeout" in results:
+                  raise SystemExit(output.read_text())
+              time.sleep(0.1)
+          else:
+              raise SystemExit("Native receiver did not complete")
+          PY
+          cat quartz-paste.stderr
       - uses: actions/upload-artifact@v7
         if: always()
         with:

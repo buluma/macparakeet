@@ -2,15 +2,34 @@
 #import <Cocoa/Cocoa.h>
 #import <ApplicationServices/ApplicationServices.h>
 
-int main(void) {
+int main(int argc, const char *argv[]) {
     @autoreleasepool {
         if (strcmp(getenv("GITHUB_ACTIONS") ?: "", "true") ||
             strcmp(getenv("RUNNER_ENVIRONMENT") ?: "", "github-hosted")) {
             fprintf(stderr, "Refusing input outside a disposable GitHub-hosted runner.\n");
             return 1;
         }
-        if (!CGPreflightPostEventAccess()) {
-            puts("{\"result\":\"unavailable\",\"reason\":\"post_permission\"}");
+        if (argc == 2 && !strcmp(argv[1], "--post")) {
+            if (!CGPreflightPostEventAccess()) {
+                puts("{\"result\":\"unavailable\",\"reason\":\"post_permission\"}");
+                return 1;
+            }
+            CGEventSourceRef source = CGEventSourceCreate(kCGEventSourceStateCombinedSessionState);
+            CGEventRef down = CGEventCreateKeyboardEvent(source, 9, true);
+            CGEventRef up = CGEventCreateKeyboardEvent(source, 9, false);
+            if (!source || !down || !up) {
+                if (down) CFRelease(down);
+                if (up) CFRelease(up);
+                if (source) CFRelease(source);
+                exit(1);
+            }
+            CGEventSetFlags(down, kCGEventFlagMaskCommand);
+            CGEventSetFlags(up, kCGEventFlagMaskCommand);
+            CGEventSetIntegerValueField(down, kCGEventSourceUserData, 0x4D505343);
+            CGEventSetIntegerValueField(up, kCGEventSourceUserData, 0x4D505343);
+            CGEventPost(kCGSessionEventTap, down);
+            CGEventPost(kCGSessionEventTap, up);
+            CFRelease(down); CFRelease(up); CFRelease(source);
             return 0;
         }
         NSApplication *app = NSApplication.sharedApplication;
@@ -49,22 +68,8 @@ int main(void) {
             deliveryDeadline = NSProcessInfo.processInfo.systemUptime + 5;
             [NSPasteboard.generalPasteboard clearContents];
             [NSPasteboard.generalPasteboard setString:expected forType:NSPasteboardTypeString];
-            CGEventSourceRef source = CGEventSourceCreate(kCGEventSourceStateCombinedSessionState);
-            CGEventRef down = CGEventCreateKeyboardEvent(source, 9, true);
-            CGEventRef up = CGEventCreateKeyboardEvent(source, 9, false);
-            if (!source || !down || !up) {
-                if (down) CFRelease(down);
-                if (up) CFRelease(up);
-                if (source) CFRelease(source);
-                exit(1);
-            }
-            CGEventSetFlags(down, kCGEventFlagMaskCommand);
-            CGEventSetFlags(up, kCGEventFlagMaskCommand);
-            CGEventSetIntegerValueField(down, kCGEventSourceUserData, 0x4D505343);
-            CGEventSetIntegerValueField(up, kCGEventSourceUserData, 0x4D505343);
-            CGEventPost(kCGSessionEventTap, down);
-            CGEventPost(kCGSessionEventTap, up);
-            CFRelease(down); CFRelease(up); CFRelease(source);
+            puts("{\"result\":\"receiver_ready\"}");
+            fflush(stdout);
         }];
         [NSTimer scheduledTimerWithTimeInterval:0.1 repeats:YES block:^(NSTimer *timer) {
             if ([text.string isEqualToString:expected]) {
