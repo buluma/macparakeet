@@ -29,8 +29,22 @@ jobs:
       - name: Qualify native text-field paste
         run: |
           set -o pipefail
-          clang -Wall -Wextra -Werror -fobjc-arc -framework Cocoa -framework ApplicationServices scripts/ci/quartz-paste-probe.m -o "$RUNNER_TEMP/quartz-paste-probe"
-          "$RUNNER_TEMP/quartz-paste-probe" | tee quartz-paste.jsonl
+          probe_app="$RUNNER_TEMP/QuartzPasteProbe.app"
+          mkdir -p "$probe_app/Contents/MacOS"
+          cat > "$probe_app/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+          <key>CFBundleExecutable</key><string>QuartzPasteProbe</string>
+          <key>CFBundleIdentifier</key><string>com.macparakeet.ci.QuartzPasteProbe</string>
+          <key>CFBundleName</key><string>QuartzPasteProbe</string>
+          <key>CFBundlePackageType</key><string>APPL</string>
+          </dict></plist>
+          PLIST
+          clang -Wall -Wextra -Werror -fobjc-arc -framework Cocoa -framework ApplicationServices scripts/ci/quartz-paste-probe.m -o "$probe_app/Contents/MacOS/QuartzPasteProbe"
+          open -W -n "$probe_app" --stdout "$PWD/quartz-paste.jsonl" --stderr "$PWD/quartz-paste.stderr" --env GITHUB_ACTIONS=true --env RUNNER_ENVIRONMENT=github-hosted
+          cat quartz-paste.jsonl quartz-paste.stderr
+          python3 -c 'import json; assert any(json.loads(line).get("result") == "native_paste_observed" for line in open("quartz-paste.jsonl")), "native paste was not observed"'
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -38,3 +52,4 @@ jobs:
           path: |
             quartz-key-state.jsonl
             quartz-paste.jsonl
+            quartz-paste.stderr
