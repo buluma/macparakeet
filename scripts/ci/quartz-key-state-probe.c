@@ -13,12 +13,35 @@ static const CGKeyCode testKey = 90; // F20; no text or modifier chord.
 static const int64_t marker = 0x4D50524F4245;
 static CGEventSourceRef activeSource;
 static CGEventTapLocation activeLocation;
+static unsigned observedDown;
+static unsigned observedUp;
+
+static CGEventRef observe(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void *context) {
+    (void)proxy;
+    (void)context;
+    if (CGEventGetIntegerValueField(event, kCGEventSourceUserData) == marker) {
+        if (type == kCGEventKeyDown) observedDown++;
+        if (type == kCGEventKeyUp) observedUp++;
+    }
+    return event;
+}
+
+static void settle(void) {
+    CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.2, false);
+}
 
 static void snapshot(const char *phase) {
-    printf("{\"phase\":\"%s\",\"pid\":%d,\"session_down\":%s,\"hid_down\":%s}\n",
+    printf("{\"phase\":\"%s\",\"pid\":%d,\"session_down\":%s,\"hid_down\":%s,"
+           "\"observed_down\":%u,\"observed_up\":%u}\n",
            phase, getpid(),
            CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, testKey) ? "true" : "false",
-           CGEventSourceKeyState(kCGEventSourceStateHIDSystemState, testKey) ? "true" : "false");
+           CGEventSourceKeyState(kCGEventSourceStateHIDSystemState, testKey) ? "true" : "false",
+           observedDown, observedUp);
+    if (activeSource) {
+        CGEventSourceStateID sourceID = CGEventSourceGetSourceStateID(activeSource);
+        printf("{\"actual_source_state\":%d,\"source_down\":%s}\n", sourceID,
+               CGEventSourceKeyState(sourceID, testKey) ? "true" : "false");
+    }
     fflush(stdout);
 }
 
@@ -45,10 +68,10 @@ static bool allUp(void) {
         && !CGEventSourceKeyState(kCGEventSourceStateHIDSystemState, testKey);
 }
 
-static void freshReader(const char *executable) {
+static void childProcess(const char *executable, const char *mode, const char *argument) {
     pid_t child = fork();
     if (child == 0) {
-        execl(executable, executable, "--read-only", NULL);
+        execl(executable, executable, mode, argument, NULL);
         _exit(127);
     }
     if (child < 0) exit(1);
@@ -72,7 +95,27 @@ int main(int argc, char **argv) {
         puts("{\"result\":\"unavailable\",\"reason\":\"event_post_permission\"}");
         return 0;
     }
+    if (argc == 3 && strcmp(argv[1], "--orphan-producer") == 0) {
+        activeSource = CGEventSourceCreate((CGEventSourceStateID)atoi(argv[2]));
+        activeLocation = kCGHIDEventTap;
+        if (!activeSource || !allUp() || !post(true)) return 1;
+        usleep(200000);
+        snapshot("producer_before_exit_without_release");
+        CFRelease(activeSource);
+        activeSource = NULL;
+        return 0; // Deliberately no atexit release in this isolated child.
+    }
     atexit(cleanup);
+    CFMachPortRef tap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap,
+        kCGEventTapOptionListenOnly,
+        CGEventMaskBit(kCGEventKeyDown) | CGEventMaskBit(kCGEventKeyUp), observe, NULL);
+    if (!tap) {
+        puts("{\"result\":\"unavailable\",\"reason\":\"delivery_witness_permission\"}");
+        return 0;
+    }
+    CFRunLoopSourceRef tapSource = CFMachPortCreateRunLoopSource(NULL, tap, 0);
+    if (!tapSource) { CFRelease(tap); return 1; }
+    CFRunLoopAddSource(CFRunLoopGetCurrent(), tapSource, kCFRunLoopDefaultMode);
     CGEventSourceStateID states[] = {kCGEventSourceStateHIDSystemState,
         kCGEventSourceStateCombinedSessionState, kCGEventSourceStatePrivate};
     CGEventTapLocation locations[] = {kCGHIDEventTap, kCGSessionEventTap};
@@ -87,18 +130,44 @@ int main(int argc, char **argv) {
             if (!activeSource) return 1;
             printf("{\"source_state\":%d,\"post_location\":%u}\n", states[state], locations[location]);
             snapshot("before");
+            unsigned downBefore = observedDown;
             if (!post(true)) return 1;
-            usleep(200000);
+            settle();
             snapshot("down_without_up");
-            freshReader(argv[0]);
+            if (observedDown == downBefore) {
+                puts("{\"result\":\"inconclusive\",\"reason\":\"no_down_delivery\"}");
+                return 1;
+            }
+            childProcess(argv[0], "--read-only", NULL);
             if (!post(false)) return 1;
-            usleep(200000);
+            settle();
             snapshot("released");
             cleanup();
             snapshot("source_destroyed");
             if (!allUp()) return 1;
         }
     }
+    for (unsigned state = 0; state < 2; state++) {
+        if (!allUp()) return 1;
+        activeLocation = kCGHIDEventTap;
+        activeSource = CGEventSourceCreate(states[state]);
+        if (!activeSource) return 1;
+        char argument[16];
+        snprintf(argument, sizeof(argument), "%d", states[state]);
+        printf("{\"orphan_source_state\":%d}\n", states[state]);
+        childProcess(argv[0], "--orphan-producer", argument);
+        settle();
+        snapshot("producer_exited_without_release");
+        childProcess(argv[0], "--read-only", NULL);
+        cleanup();
+        settle();
+        snapshot("orphan_cleanup");
+        if (!allUp()) return 1;
+    }
+    CFRunLoopRemoveSource(CFRunLoopGetCurrent(), tapSource, kCFRunLoopDefaultMode);
+    CFMachPortInvalidate(tap);
+    CFRelease(tapSource);
+    CFRelease(tap);
     puts("{\"result\":\"observed\",\"physical_holds_tested\":false,\"jump_desktop_tested\":false}");
     return 0;
 }
