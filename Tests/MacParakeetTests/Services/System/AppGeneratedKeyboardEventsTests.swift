@@ -63,7 +63,11 @@ final class AppGeneratedKeyboardEventsTests: XCTestCase {
         StreamingCursorEventMarker.mark(event)
         XCTAssertTrue(AppGeneratedEventMarker.isMarked(event))
         XCTAssertEqual(StreamingCursorEventMarker.userData, 0x4D50_5343)
-        event.setIntegerValueField(.eventSourceUserData, value: 123)
-        XCTAssertFalse(AppGeneratedEventMarker.isMarked(event))
+        // Quartz retains the first source-user-data value on an event. Foreign
+        // metadata belongs on a fresh event, as it does at the production boundary.
+        let foreign = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: true))
+        foreign.setIntegerValueField(.eventSourceUserData, value: 123)
+        XCTAssertEqual(foreign.getIntegerValueField(.eventSourceUserData), 123)
+        XCTAssertFalse(AppGeneratedEventMarker.isMarked(foreign))
     }
 }

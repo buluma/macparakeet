@@ -76,6 +76,14 @@ synthetic releases, and legacy recovery. Existing physical-input, peer,
 Command-layout, and clipboard restoration suites remain part of GitHub CI.
 No local Swift build/test or no-mistakes test gate is run, as requested.
 
+The first full input-branch suite executed 8,230 cases with one failure in the
+new test's attempt to overwrite an already-stamped event's source user data.
+A small local C experiment created event objects without posting input: after
+writing our marker, replacing it with 123 still read the original marker; a
+separate fresh event read 123 correctly. The test now checks foreign metadata
+on a fresh event, with a raw-value assertion. Production only stamps new events
+once and does not remove markers, so no production change was needed.
+
 Independent initial correctness review confirmed the boundary design and
 required the producer-exit and delivery-witness cases included in the probe.
 Local Greptile is installed but unauthenticated; independent review and GitHub
