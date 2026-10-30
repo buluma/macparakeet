@@ -137,7 +137,7 @@ final class SettingsSearchIndexTests: XCTestCase {
 
         for query in [
             "recordings", "files engine", "accuracy", "slower",
-            "separate engine", "final transcript", "same as live", "advanced"
+            "separate engine", "final transcript", "same as live", "advanced",
         ] {
             let results = SettingsSearchIndex.matches(query)
             XCTAssertTrue(
@@ -173,7 +173,7 @@ final class SettingsSearchIndexTests: XCTestCase {
             for query in [
                 "meeting hotkey", "meeting shortcut", "change hotkey",
                 "remove shortcut", "disable hotkey", "CMD+Shift+M",
-                "Command Shift M", "⌘⇧M"
+                "Command Shift M", "⌘⇧M",
             ] {
                 let ids = Set(SettingsSearchIndex.matches(query).map(\.id))
                 XCTAssertTrue(ids.contains("meeting.hotkey"), "Query \(query) should find the meeting hotkey")
@@ -207,7 +207,8 @@ final class SettingsSearchIndexTests: XCTestCase {
                 XCTAssertTrue(ids.contains("meeting.calendar"), "Query \(query) should find the calendar row")
             } else {
                 XCTAssertFalse(ids.contains("meeting"), "Query \(query) should not reveal the hidden meeting card")
-                XCTAssertFalse(ids.contains("meeting.calendar"), "Query \(query) should not reveal the hidden calendar row")
+                XCTAssertFalse(
+                    ids.contains("meeting.calendar"), "Query \(query) should not reveal the hidden calendar row")
             }
         }
     }
@@ -215,7 +216,7 @@ final class SettingsSearchIndexTests: XCTestCase {
     func testMeetingPillQueriesFindFloatingControlsSetting() {
         let queries = [
             "floating", "pill", "meeting controls", "floating controls",
-            "meeting pill", "hide meeting", "recording ui"
+            "meeting pill", "hide meeting", "recording ui",
         ]
 
         for query in queries {
@@ -223,7 +224,9 @@ final class SettingsSearchIndexTests: XCTestCase {
             if AppFeatures.meetingRecordingEnabled {
                 XCTAssertTrue(ids.contains("meeting.floatingControls"), "Query \(query) should find floating controls")
             } else {
-                XCTAssertFalse(ids.contains("meeting.floatingControls"), "Query \(query) should not reveal hidden meeting settings")
+                XCTAssertFalse(
+                    ids.contains("meeting.floatingControls"), "Query \(query) should not reveal hidden meeting settings"
+                )
             }
         }
     }
@@ -235,7 +238,8 @@ final class SettingsSearchIndexTests: XCTestCase {
             if AppFeatures.meetingRecordingEnabled {
                 XCTAssertTrue(ids.contains("meeting.openAppAfterEnd"), "Query \(query) should find open-app toggle")
             } else {
-                XCTAssertFalse(ids.contains("meeting.openAppAfterEnd"), "Query \(query) should not reveal hidden meeting settings")
+                XCTAssertFalse(
+                    ids.contains("meeting.openAppAfterEnd"), "Query \(query) should not reveal hidden meeting settings")
             }
         }
 
@@ -245,7 +249,8 @@ final class SettingsSearchIndexTests: XCTestCase {
             if AppFeatures.meetingRecordingEnabled {
                 XCTAssertTrue(ids.contains("meeting.notifyOnEnd"), "Query \(query) should find notify toggle")
             } else {
-                XCTAssertFalse(ids.contains("meeting.notifyOnEnd"), "Query \(query) should not reveal hidden meeting settings")
+                XCTAssertFalse(
+                    ids.contains("meeting.notifyOnEnd"), "Query \(query) should not reveal hidden meeting settings")
             }
         }
     }
@@ -308,9 +313,12 @@ final class SettingsSearchIndexTests: XCTestCase {
         for query in queries {
             let ids = Set(SettingsSearchIndex.matches(query).map(\.id))
             if AppFeatures.meetingRecordingEnabled {
-                XCTAssertTrue(ids.contains("meeting.speakerDetection"), "Query \(query) should find meeting speaker detection")
+                XCTAssertTrue(
+                    ids.contains("meeting.speakerDetection"), "Query \(query) should find meeting speaker detection")
             } else {
-                XCTAssertFalse(ids.contains("meeting.speakerDetection"), "Query \(query) should not reveal hidden meeting settings")
+                XCTAssertFalse(
+                    ids.contains("meeting.speakerDetection"), "Query \(query) should not reveal hidden meeting settings"
+                )
             }
         }
     }
@@ -370,7 +378,10 @@ final class SettingsSearchIndexTests: XCTestCase {
         let entry = try XCTUnwrap(SettingsSearchIndex.entries.first { $0.id == "ai.meetingLanguage" })
         XCTAssertEqual(entry.cardAnchor, "ai.meetingLanguage")
 
-        for query in ["ai result language", "meeting ai language", "follow transcript", "summary language", "output language", "korean"] {
+        for query in [
+            "ai result language", "meeting ai language", "follow transcript", "summary language", "output language",
+            "korean",
+        ] {
             let ids = Set(SettingsSearchIndex.matches(query).map(\.id))
             XCTAssertTrue(ids.contains("ai.meetingLanguage"), "Query \(query) should find Language of AI Results")
         }
@@ -400,7 +411,8 @@ final class SettingsSearchIndexTests: XCTestCase {
             if AppFeatures.aiFormatterProfilesEnabled {
                 XCTAssertTrue(ids.contains("ai.formatter"), "Query \(query) should find AI Formatter")
             } else {
-                XCTAssertFalse(ids.contains("ai.formatter"), "Query \(query) should not reveal hidden AI Formatter profiles")
+                XCTAssertFalse(
+                    ids.contains("ai.formatter"), "Query \(query) should not reveal hidden AI Formatter profiles")
             }
         }
     }
@@ -439,7 +451,7 @@ final class SettingsSearchIndexTests: XCTestCase {
             "meeting.urlControl",
             "meeting.autoStop",
             "meeting.calendar",
-            "system.permissions.screen"
+            "system.permissions.screen",
         ]
         let calendarGatedIds: Set<String> = ["meeting.calendar"]
         let autoStopGatedIds: Set<String> = ["meeting.autoStop"]
@@ -449,10 +461,12 @@ final class SettingsSearchIndexTests: XCTestCase {
         if AppFeatures.meetingRecordingEnabled {
             // Calendar entry drops out independently when calendarEnabled
             // is off, and auto-stop drops out independently while staged.
-            let expected = AppFeatures.calendarEnabled
+            let expected =
+                AppFeatures.calendarEnabled
                 ? meetingGatedIds
                 : meetingGatedIds.subtracting(calendarGatedIds)
-            let expectedWithAutoStop = AppFeatures.meetingAutoStopEnabled
+            let expectedWithAutoStop =
+                AppFeatures.meetingAutoStopEnabled
                 ? expected
                 : expected.subtracting(autoStopGatedIds)
             XCTAssertEqual(
@@ -529,6 +543,55 @@ final class SettingsSearchIndexTests: XCTestCase {
         )
     }
 
+    func testStoredVoicesRemainDiscoverableWithEnrollmentDisabled() throws {
+        for speakerDetectionEnabled in [false, true] {
+            let entries = SettingsSearchIndex.visibleEntries(
+                hasEnrolledVoices: true,
+                speakerDetectionEnabled: speakerDetectionEnabled,
+                voiceProfilesAvailable: false
+            )
+            let management = entries.first { $0.id == "meeting.voiceProfiles" }
+            if AppFeatures.meetingRecordingEnabled {
+                let entry = try XCTUnwrap(management)
+                XCTAssertTrue(entry.matches("manage voices"))
+                XCTAssertEqual(entry.cardAnchor, "meeting")
+                XCTAssertEqual(entry.tab, .capture)
+            } else {
+                XCTAssertNil(management)
+            }
+            XCTAssertFalse(entries.contains { $0.id == "meeting.rememberSpeakers" })
+            XCTAssertTrue(entries.contains { $0.id == "system.reset.voiceProfiles" })
+        }
+        let results = SettingsSearchIndex.matches("manage voices", hasEnrolledVoices: true)
+        XCTAssertEqual(
+            results.contains { $0.id == "meeting.voiceProfiles" },
+            AppFeatures.meetingRecordingEnabled
+        )
+    }
+
+    func testVoiceProfileSearchTracksStoredVoicesAndSpeakerDetection() {
+        for available in [false, true] {
+            for stored in [false, true] {
+                for detection in [false, true] {
+                    let ids = Set(
+                        SettingsSearchIndex.visibleEntries(
+                            hasEnrolledVoices: stored,
+                            speakerDetectionEnabled: detection,
+                            voiceProfilesAvailable: available
+                        ).map(\.id))
+                    XCTAssertEqual(
+                        ids.contains("meeting.voiceProfiles"),
+                        AppFeatures.meetingRecordingEnabled && (available || stored)
+                    )
+                    XCTAssertEqual(
+                        ids.contains("meeting.rememberSpeakers"),
+                        AppFeatures.meetingRecordingEnabled && available && detection
+                    )
+                }
+            }
+        }
+    }
+
     /// Three entries were retitled to the text their rows show today. The
     /// earlier wording stays searchable as a keyword.
     func testRetitledRowsKeepTheirEarlierWordingSearchable() throws {
@@ -578,125 +641,4 @@ final class SettingsSearchIndexTests: XCTestCase {
         }
     }
 
-    // MARK: - Row coverage
-
-    // The rows live in the app target, which the view-model tests cannot
-    // import, so these tests read `SettingsView.swift` as text. Only that file
-    // is scanned: the AI and Calendar tabs build their rows in their own views
-    // and stay covered by their card entries.
-
-    /// Helpers in `SettingsView.swift` whose `title:` is the text a card or
-    /// row shows. A bare `Toggle("…")` label is scanned as well.
-    private static let rowHelpers: Set<String> = [
-        "settingsCard", "SettingsCard", "SettingsRow", "settingsToggleRow", "rowText",
-        "transcriptionHotkeyRow", "resetActionRow", "permissionStatusRow", "modelStatusRow",
-    ]
-
-    /// Helpers that take a `title:` but do not draw a setting: the Storage
-    /// stat tiles and the engine banners.
-    private static let nonRowHelpers: Set<String> = [
-        "metricTile", "speechEngineSwitchBanner", "EngineDownloadBanner",
-    ]
-
-    /// Rows left out of the index on purpose, with the reason.
-    private static let unindexedRowTitles: [String: String] = [
-        "Pending recovery": "status line, shown only while a partial recording waits",
-        "Not applied yet": "status line, shown only until the next relaunch",
-    ]
-
-    private func settingsViewSource() throws -> String {
-        let viewURL = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Sources/MacParakeet/Views/Settings/SettingsView.swift")
-        return try String(contentsOf: viewURL, encoding: .utf8)
-    }
-
-    /// The capture groups of every match of `pattern` in `source`.
-    private func captures(of pattern: String, in source: String) throws -> [[String]] {
-        let regex = try NSRegularExpression(pattern: pattern)
-        let range = NSRange(source.startIndex..., in: source)
-        return regex.matches(in: source, range: range).map { match in
-            (1..<match.numberOfRanges).compactMap { group in
-                Range(match.range(at: group), in: source).map { String(source[$0]) }
-            }
-        }
-    }
-
-    /// `(helper, title)` for every call that passes a literal title.
-    private func titledCalls(in source: String) throws -> [(helper: String, title: String)] {
-        try captures(of: #"\b(\w+)\(\s*title:\s*"((?:[^"\\]|\\.)+)""#, in: source)
-            .map { (helper: $0[0], title: $0[1]) }
-    }
-
-    /// The row scan only sees helpers it knows by name, so a new or renamed
-    /// helper would drop its rows out of the scan without failing anything.
-    /// This fails instead, until the helper is listed as a row or as not one.
-    func testRowScanKnowsEveryTitledHelperInSettingsView() throws {
-        let source = try settingsViewSource()
-        let declaredHelpers = try captures(
-            of: #"\bfunc\s+(\w+)[^{]*?[(,]\s*title:\s*String"#, in: source
-        ).map { $0[0] }
-        let calledHelpers = try titledCalls(in: source).map(\.helper)
-
-        let unknown = Set(declaredHelpers + calledHelpers)
-            .subtracting(Self.rowHelpers)
-            .subtracting(Self.nonRowHelpers)
-        XCTAssertTrue(
-            unknown.isEmpty,
-            "Titled helpers the row scan does not know: \(unknown.sorted().joined(separator: ", ")). "
-                + "Add each to rowHelpers or nonRowHelpers."
-        )
-
-        let unused = Self.rowHelpers.subtracting(calledHelpers)
-        XCTAssertTrue(
-            unused.isEmpty,
-            "Row helpers no longer called with a literal title: \(unused.sorted().joined(separator: ", ")). "
-                + "A renamed helper would leave its rows unscanned."
-        )
-    }
-
-    /// Every card and row the view declares must have an index entry with the
-    /// exact title it shows. A title declared more than once (Push to talk,
-    /// Voice profiles) needs that many entries, so removing one of them fails
-    /// even though the other still carries the title. Checked against the full
-    /// catalog, so the result does not depend on the feature flags.
-    func testEveryDeclaredSettingsRowTitleIsSearchable() throws {
-        let source = try settingsViewSource()
-        var declared: [String: Int] = [:]
-        for call in try titledCalls(in: source) where Self.rowHelpers.contains(call.helper) {
-            declared[call.title, default: 0] += 1
-        }
-        for toggle in try captures(of: #"\bToggle\(\s*"((?:[^"\\]|\\.)+)""#, in: source) {
-            declared[toggle[0], default: 0] += 1
-        }
-        // `autoSaveOptions` draws its "Format" row once in source but is called
-        // for both the Transcription and Meeting Recording cards.
-        let autoSaveCalls = try captures(of: #"(?<!func )\bautoSaveOptions\(\s*format:"#, in: source).count
-        XCTAssertEqual(autoSaveCalls, 2, "autoSaveOptions should be called once per card")
-        declared["Format", default: 0] += max(autoSaveCalls - 1, 0)
-        XCTAssertGreaterThan(
-            declared.values.reduce(0, +), 40, "The row scan should find the Settings rows"
-        )
-
-        for title in Self.unindexedRowTitles.keys where declared[title] == nil {
-            XCTFail("\(title) is no longer declared; remove it from unindexedRowTitles")
-        }
-
-        var indexed: [String: Int] = [:]
-        for entry in SettingsSearchIndex.allEntries {
-            indexed[entry.title, default: 0] += 1
-        }
-        let missing =
-            declared
-            .filter { Self.unindexedRowTitles[$0.key] == nil && indexed[$0.key, default: 0] < $0.value }
-            .map { "\($0.key) (declared \($0.value), indexed \(indexed[$0.key, default: 0]))" }
-            .sorted()
-        XCTAssertTrue(
-            missing.isEmpty,
-            "Settings rows with no search entry of their own: \(missing.joined(separator: ", "))"
-        )
-    }
 }

@@ -72,9 +72,8 @@ public struct SettingsSearchEntry: Identifiable, Hashable, Sendable {
 /// the corresponding view's `.id(...)` modifier in `SettingsView.swift`.
 /// Anchor drift is currently caught by manual review — the index and
 /// the view are coupled by string convention, not by a compiler check.
-/// Row titles are checked: `SettingsSearchIndexTests` reads
-/// `SettingsView.swift` and fails when a row is declared without an entry
-/// carrying its exact title, so a new or renamed row needs its entry here.
+/// Query and visibility tests exercise the catalog's public results. New or
+/// renamed rows still require review against their rendered destinations.
 ///
 /// **Feature flags:** entries pointing at gated surfaces are filtered out
 /// when their `AppFeatures` flag is `false`, so search never lands on a
@@ -121,17 +120,17 @@ public enum SettingsSearchIndex {
         "meeting.autoStop"
     ]
 
-    /// Ids gated on `AppFeatures.isVoiceProfilesAvailable()`. The view renders
-    /// these rows only behind the experimental feature (the management row
-    /// also shows when voices are already stored, which the index cannot see),
-    /// so search does not offer them in builds where it is off. The Reset
-    /// voice-profiles row is not listed: the view never gates it on the flag.
-    private static let voiceProfilesGatedIds: Set<String> = [
-        "meeting.rememberSpeakers",
-        "meeting.voiceProfiles",
-    ]
+    public static let entries = visibleEntries(
+        hasEnrolledVoices: false, speakerDetectionEnabled: true,
+        voiceProfilesAvailable: AppFeatures.isVoiceProfilesAvailable())
 
-    public static let entries: [SettingsSearchEntry] = {
+    /// Match the view's current voice-profile destinations. Stored voices (or
+    /// a failed store read) keep management available even with enrollment off.
+    static func visibleEntries(
+        hasEnrolledVoices: Bool,
+        speakerDetectionEnabled: Bool,
+        voiceProfilesAvailable: Bool
+    ) -> [SettingsSearchEntry] {
         var result = allEntries
         if !AppFeatures.meetingRecordingEnabled {
             result = result.filter { !meetingGatedIds.contains($0.id) }
@@ -142,16 +141,18 @@ public enum SettingsSearchIndex {
         if !AppFeatures.meetingAutoStopEnabled {
             result = result.filter { !meetingAutoStopGatedIds.contains($0.id) }
         }
-        if !AppFeatures.isVoiceProfilesAvailable() {
-            result = result.filter { !voiceProfilesGatedIds.contains($0.id) }
+        if !voiceProfilesAvailable || !speakerDetectionEnabled {
+            result.removeAll { $0.id == "meeting.rememberSpeakers" }
+        }
+        if !voiceProfilesAvailable && !hasEnrolledVoices {
+            result.removeAll { $0.id == "meeting.voiceProfiles" }
         }
         return result
-    }()
+    }
 
     /// Full unfiltered catalog. Order matters: result lists are produced
-    /// by `entries.filter(...)`, and tests assert that the filter is
-    /// stable in index order. Internal rather than private so the row
-    /// coverage test can check the whole catalog whatever the flags are.
+    /// by filtering visible entries, and tests assert stable index order.
+    /// Internal so catalog and visibility tests can exercise both flag states.
     static let allEntries: [SettingsSearchEntry] = [
         // MARK: Capture
         SettingsSearchEntry(
@@ -1172,9 +1173,15 @@ public enum SettingsSearchIndex {
     /// queries return an empty array — callers should fall back to the
     /// tabbed view in that case rather than rendering an empty results
     /// list.
-    public static func matches(_ query: String) -> [SettingsSearchEntry] {
+    public static func matches(
+        _ query: String, hasEnrolledVoices: Bool = false, speakerDetectionEnabled: Bool = true
+    ) -> [SettingsSearchEntry] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
-        return entries.filter { $0.matches(trimmed) }
+        return visibleEntries(
+            hasEnrolledVoices: hasEnrolledVoices,
+            speakerDetectionEnabled: speakerDetectionEnabled,
+            voiceProfilesAvailable: AppFeatures.isVoiceProfilesAvailable()
+        ).filter { $0.matches(trimmed) }
     }
 }
