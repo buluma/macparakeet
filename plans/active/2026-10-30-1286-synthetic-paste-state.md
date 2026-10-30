@@ -25,7 +25,9 @@ alone cannot fix the aggregate veto or survive a fresh process.
 3. Add deterministic regression and negative-control tests; update the input
    contract, feature spec, subsystem README, and root-cause record.
 4. Commit, open a PR, obtain independent review, and drive exact-head GitHub CI
-   and valid review findings to completion. Do not merge or release.
+   and valid review findings to completion. The user subsequently authorized
+   merge after a fresh review, including Opus 5.5, and passing checks. Release
+   remains gated on native acceptance.
 
 ## Verification
 

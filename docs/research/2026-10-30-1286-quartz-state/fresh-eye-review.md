@@ -1,0 +1,106 @@
+# Fresh review of #1293 and #1298
+
+Review date: 2026-10-30. Input code reviewed at
+`2fa2f0090a7e7872c6f71625f9488684400a1b88`; the separate editor fixture at
+`5172acd8207c3b9849c3b25032e68b8dbca574c6`.
+
+## Scope and findings
+
+The review read the complete input diff, surrounding posting and hotkey
+recovery paths, the native experiments, tests, contracts, and all bot threads.
+An independent adversarial review found no blocking code defect. It also
+reviewed the editor fixture and confirmed that its readiness waits preserve
+the substantive geometry assertions.
+
+The ownership boundary is consistent: generated keyboard events are marked
+and posted at the session entry point; all three hotkey listeners reject the
+marker before consumption or gesture/release bookkeeping. Bare-Fn ordinary-key
+reconciliation uses HID state. Custom-trigger synchronization and peer-claim
+recovery retain session state. Both members of each keyboard pair are allocated
+before either is posted, with no suspension between posts.
+
+One contract claim was too broad: preserving unmarked event dispatch does not
+preserve the old pre-held session-key veto. The follow-up explicitly documents
+that session-only ordinary keys do not veto fresh Fn, even when unmarked, and
+adds a regression that feeds an unmarked down through the actual input boundary
+before Fn. The existing test still requires arriving unmarked ordinary typing
+to interrupt a take. Peer exceptions remain unchanged. Production code did not
+change during this clarification.
+
+## Opus 5.5 review and disposition
+
+Claude Code 2.1.311 ran in noninteractive mode with model
+`claude-opus-5-5`, no fallback, and no enabled tools. The initial review and a
+follow-up both completed successfully; assistant response metadata and the
+reported canonical model confirmed Opus 5.5 on the first-party provider.
+Session: `e1d878ea-a68e-4039-b2e4-ab9c3493ea3c`. The bundle contained the diff,
+relevant source/tests and evidence, not user audio, transcripts or credentials.
+
+Opus found no merge-blocking code defect but identified one additional HID
+writer worth repairing: streaming interruption replayed an intercepted session
+event upstream at HID after flushing. The correction keeps replay at the
+session entry point and preserves the original, unmarked metadata. A test
+exercises the production replay helper for keyboard and mouse input, including
+one-post behavior, copied fields, foreign metadata and posting location.
+Independent review agreed with the correction; Opus's follow-up found no new
+correctness issue.
+
+The hosted probe now models original session down, replay at HID or session,
+and the producer's session up. It records the old path without assuming the
+cross-table release outcome and requires the corrected path to leave HID clear.
+Both reviewers requested delivery-witness checks; each step now requires a
+matching observed event. Failures after a possible HID replay retain HID
+cleanup. This models table effects, not the production callback's live ordering
+or intercepted-event metadata; the posting-boundary test covers the copy.
+
+Two other concrete observations were addressed: the receiver's polling parser
+now consumes only newline-terminated JSON records, and the feature spec
+distinguishes live event flags from combined-session recovery flags. A local
+parser check covered empty/partial/complete records and retained failure on a
+malformed complete record.
+
+The combined-session source is retained: the measured posting boundary works
+and the native receiver accepted it; no destination/source-metadata failure was
+established. Optional source-text scan tests and additional admission logging
+were not added. The existing semantic tests, source review and bounded native
+experiments address the concrete question without a new tracking framework.
+
+## Bot findings
+
+- [Developer probes extracting the old marker](https://github.com/moona3k/macparakeet/pull/1293#discussion_r4427897023): both now compile the shared helper directly. Verified in source; thread resolved.
+- [Unavailable native probe could pass](https://github.com/moona3k/macparakeet/pull/1293#discussion_r4428676721): both permission failure paths now exit nonzero. Verified in source; thread resolved and acknowledged by the bot.
+- [Modifier source misstated in the spec](https://github.com/moona3k/macparakeet/pull/1293#discussion_r4428676731): the spec now distinguishes combined-session modifier flags from HID ordinary-key state. Verified against code; thread resolved and acknowledged by the bot.
+
+## Native evidence replay
+
+[Run 41134052540](https://github.com/moona3k/macparakeet/actions/runs/41134052540)
+passed at the reviewed input head. Its downloaded JSON was checked explicitly:
+six posting-point/source combinations, eight fresh readers, two producer-exit
+cases, marked down-delivery witnesses, cleanup, and native AppKit paste
+delivery all match the reported boundary. The probe is observational: its green
+status alone is not the assertion that HID and session state separated. The
+subsequent replay correction and expanded probe need their own current-head
+GitHub checks; this earlier run does not qualify those changes.
+
+The C probe passed a syntax-only compiler check, the edited Swift files parsed
+through swift-format, and whitespace checks passed. No local Swift build/test,
+input injection, or no-mistakes test gate ran.
+The user's earlier instruction to use GitHub CI still applies. Current check
+status belongs to the [input PR](https://github.com/moona3k/macparakeet/pull/1293)
+and [fixture PR](https://github.com/moona3k/macparakeet/pull/1298), not an older
+head's result.
+
+## Merge and release boundary
+
+The user has authorized merging once review and checks support it. Current-head
+CI must pass before merge; the prior timed-out test run is not a pass. The
+repository does not enforce this through branch protection or auto-merge.
+
+The fix prevents our direct keyboard output from creating this admission veto.
+It does not repair arbitrary old or third-party HID contamination. An unmarked
+release retains the existing recovery path. Physical held V/Command, non-US
+layout, copy/Unicode destinations, and the reporter's Jump Desktop setup remain
+native release acceptance work. Live replay ordering against a keyUp already
+queued during flushing is also unverified. Session-only remote/remapped input needs
+acceptance because pre-held admission deliberately follows HID state.
+The original lost-release trigger is still unproven; keep #1286 open.

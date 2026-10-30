@@ -57,14 +57,47 @@ final class AppGeneratedKeyboardEventsTests: XCTestCase {
         XCTAssertThrowsError(try poster.simulatePaste(using: PasteShortcutKeyResolver()))
     }
 
+    func testStreamingInterruptReplayPreservesUnmarkedInputAtSessionBoundary() throws {
+        let key = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: true))
+        let mouse = try XCTUnwrap(
+            CGEvent(
+                mouseEventSource: nil, mouseType: .leftMouseDown,
+                mouseCursorPosition: CGPoint(x: 40, y: 70), mouseButton: .left))
+        for original in [key, mouse] {
+            original.flags = .maskShift
+            original.timestamp = 123_456_789
+            original.setIntegerValueField(.eventSourceUserData, value: 123)
+            var posted: CGEvent?
+            var postCount = 0
+            XCTAssertTrue(
+                CGStreamingCursorEventPosting.replayInterceptedInput(original) { event, location in
+                    XCTAssertEqual(location, .cgSessionEventTap)
+                    posted = event
+                    postCount += 1
+                })
+            XCTAssertEqual(postCount, 1)
+            let replay = try XCTUnwrap(posted)
+            XCTAssertFalse(replay === original)
+            XCTAssertEqual(replay.type, original.type)
+            XCTAssertEqual(replay.flags, original.flags)
+            XCTAssertEqual(replay.timestamp, original.timestamp)
+            XCTAssertEqual(replay.location, original.location)
+            XCTAssertEqual(
+                replay.getIntegerValueField(.keyboardEventKeycode),
+                original.getIntegerValueField(.keyboardEventKeycode))
+            XCTAssertEqual(replay.getIntegerValueField(.eventSourceUserData), 123)
+            XCTAssertFalse(AppGeneratedEventMarker.isMarked(replay))
+        }
+    }
+
     func testStreamingMarkerRemainsCompatibleAndUnmarkedEventsStayUnmarked() throws {
         let event = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: true))
         XCTAssertFalse(AppGeneratedEventMarker.isMarked(event))
         StreamingCursorEventMarker.mark(event)
         XCTAssertTrue(AppGeneratedEventMarker.isMarked(event))
         XCTAssertEqual(StreamingCursorEventMarker.userData, 0x4D50_5343)
-        // Quartz retains the first source-user-data value on an event. Foreign
-        // metadata belongs on a fresh event, as it does at the production boundary.
+        // Do not assume already-stamped source metadata can be overwritten.
+        // Production stamps fresh events once, so model foreign input separately.
         let foreign = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: true))
         foreign.setIntegerValueField(.eventSourceUserData, value: 123)
         XCTAssertEqual(foreign.getIntegerValueField(.eventSourceUserData), 123)

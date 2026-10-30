@@ -140,11 +140,17 @@ flags, so another shortcut's keys reach the manager that owns a held take.
 - App-generated paste, copy/replacement, post-paste actions, and Unicode
   insertion carry the application marker and enter at the session posting
   point. Every hotkey listener ignores them before swallowing or processing
-  gesture/release state. Third-party unmarked input keeps its existing handling.
+  gesture/release state. Third-party unmarked events still reach the existing
+  gesture/interruption handling.
 - Bare Fn reconciles held ordinary keys from HID state, so session-only stale
   output cannot block a fresh gesture, even after process or listener restart.
   Real pre-held keys/modifiers, physical typing, and contaminated-gesture
   cancellation retain their existing policy.
+- Pre-held ordinary keys synthesized only at the session entry point do not
+  veto fresh Fn, even when unmarked. Unmarked ordinary typing during a gesture
+  retains its existing interruption behavior. This is not a promise to treat
+  session-only remote/remapped input as a physical hold; those configurations
+  need acceptance testing.
 - An own synthetic key-up cannot override a genuinely held key. Unmarked
   observed releases retain the existing override for legacy/upstream HID
   contamination; tap recovery clears this evidence when events may be missed.
@@ -152,6 +158,10 @@ flags, so another shortcut's keys reach the manager that owns a held take.
   not post corrective releases or apply held-key timeouts.
 - Custom-trigger synchronization, peer-claim recovery, and modifier-flag
   interpretation retain their existing combined-session/event semantics.
+- Streaming interruption replays the intercepted event at the session entry
+  point after posting the remaining text there. The copy preserves the original
+  metadata and is not marked as application-generated output. It must not be
+  promoted upstream into HID state.
 
 ## Non-stable fields
 

@@ -49,6 +49,17 @@ final class SyntheticPasteHotkeyTests: XCTestCase {
         XCTAssertEqual(manager.modifierFlagsChangedOutputsForTesting(flags: [.maskSecondaryFn], timestampMs: 2_000), [])
     }
 
+    func testPreHeldUnmarkedSessionOnlyKeyDoesNotVetoFreshFn() throws {
+        let manager = manager(session: [9], hid: [])
+        XCTAssertFalse(manager.processEventForTesting(type: .keyDown, event: try event(.keyDown, marked: false)))
+        // Event dispatch remains unmarked, but a fresh press reconciles held
+        // ordinary keys from HID rather than retaining session-only input.
+        XCTAssertEqual(
+            manager.modifierFlagsChangedOutputsForTesting(flags: [.maskSecondaryFn], timestampMs: 2_000),
+            [.scheduleStartupDebounce(milliseconds: FnKeyStateMachine.defaultStartupDebounceMs)]
+        )
+    }
+
     func testLegacyHIDStalenessKeepsObservedReleaseRecovery() {
         let manager = manager(session: [9], hid: [9])
         XCTAssertEqual(manager.modifierFlagsChangedOutputsForTesting(flags: [.maskSecondaryFn], timestampMs: 1_000), [])

@@ -70,6 +70,10 @@ before swallowing or gesture bookkeeping; an own key-up is not physical release
 evidence. `StreamingCursorEventMarker` remains a compatibility alias. Mouse and
 explicit per-process routing are separate surfaces.
 
+Streaming interruption also replays at the session entry point, alongside the
+flushed text. Preserve the original input's metadata without applying our
+marker: moving an intercepted session event upstream would contaminate HID.
+
 Bare-Fn admission reads HID keys; custom-trigger and peer recovery retain
 session semantics. Older app versions or other software can still leave HID
 state stale. Preserve observed-release recovery rather than manufacturing a

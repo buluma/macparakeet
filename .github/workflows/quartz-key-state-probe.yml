@@ -49,8 +49,10 @@ jobs:
           deadline = time.monotonic() + 20
           posted = False
           while time.monotonic() < deadline:
-              lines = output.read_text().splitlines() if output.exists() else []
-              results = [json.loads(line).get("result") for line in lines]
+              text = output.read_text() if output.exists() else ""
+              # The receiver can be between writes; consume complete records only.
+              lines = text.split("\n")[:-1]
+              results = [json.loads(line).get("result") for line in lines if line]
               if "receiver_ready" in results and not posted:
                   subprocess.run([sys.argv[1], "--post"], check=True)
                   posted = True

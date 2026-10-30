@@ -164,6 +164,51 @@ int main(int argc, char **argv) {
         snapshot("orphan_cleanup");
         if (!allUp()) return 1;
     }
+    // Model an intercepted session keyDown replayed at either entry point,
+    // followed by the original producer's session keyUp. Observe the old HID
+    // path rather than assuming whether that later release clears HID state.
+    for (unsigned location = 0; location < 2; location++) {
+        if (!allUp()) return 1;
+        activeSource = CGEventSourceCreate(kCGEventSourceStateCombinedSessionState);
+        activeLocation = kCGSessionEventTap;
+        if (!activeSource) return 1;
+        printf("{\"replay_post_location\":%u}\n", locations[location]);
+        unsigned originalDownBefore = observedDown;
+        if (!post(true)) return 1;
+        settle();
+        snapshot("replay_original_session_down");
+        if (observedDown == originalDownBefore ||
+            !CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, testKey) ||
+            CGEventSourceKeyState(kCGEventSourceStateHIDSystemState, testKey)) {
+            activeLocation = kCGHIDEventTap;
+            return 1;
+        }
+        activeLocation = locations[location];
+        unsigned replayDownBefore = observedDown;
+        if (!post(true)) return 1;
+        settle();
+        snapshot("replay_copy_down");
+        if (observedDown == replayDownBefore) return 1;
+        bool replayKeptHIDUp = !CGEventSourceKeyState(kCGEventSourceStateHIDSystemState, testKey);
+        activeLocation = kCGSessionEventTap;
+        unsigned releaseBefore = observedUp;
+        bool releasePosted = post(false);
+        // Any failure from here must still release an old HID replay at HID.
+        activeLocation = kCGHIDEventTap;
+        if (!releasePosted) return 1;
+        settle();
+        snapshot("replay_session_release");
+        if (observedUp == releaseBefore) return 1;
+        bool replayFinishedUp = allUp();
+        cleanup();
+        settle();
+        snapshot("replay_cleanup");
+        if (!allUp()) return 1;
+        if (locations[location] == kCGSessionEventTap && (!replayKeptHIDUp || !replayFinishedUp)) {
+            puts("{\"result\":\"failed\",\"reason\":\"session_replay_contaminated_state\"}");
+            return 1;
+        }
+    }
     CFRunLoopRemoveSource(CFRunLoopGetCurrent(), tapSource, kCFRunLoopDefaultMode);
     CFMachPortInvalidate(tap);
     CFRelease(tapSource);

@@ -43,6 +43,13 @@ marker before consuming input or modifying gesture/release state. The existing
 streaming marker value/name remains compatible. Custom shortcuts, peer-claim
 recovery, and modifier flags retain their existing semantics.
 
+Pre-held session-only ordinary keys are excluded from the HID admission
+snapshot even when unmarked. Unmarked events still reach gesture handling;
+ordinary typing retains its existing interruption behavior. Remote-input or
+remapping configurations that use session-only injection therefore need their
+own acceptance test; preserving event dispatch does not preserve the old
+session-based pre-held-key veto.
+
 Old versions or other software can still contaminate HID state. The two Quartz
 tables cannot distinguish that from a real held key. Existing observed-release
 recovery is retained; pressing and releasing the affected key can restore Fn.
@@ -102,11 +109,19 @@ consumer, a remapper that reposts at HID, or the reporter's Jump environment.
 Independent review preserved session-based peer pruning and added a regression
 where the session table reports a claimed peer held while HID reports it up.
 GitHub Greptile identified two developer probes that extracted the old marker
-by text; both now compile the shared keyboard helper directly. The physical
-interruption replay in StreamingCursorInserter remains at HID because it
-forwards the intercepted user event; it is not generated text output.
+by text; both now compile the shared keyboard helper directly. The fresh Opus
+review identified the interruption replay as another potential HID writer:
+an intercepted event has already reached the session stage, so replaying it
+upstream can promote session-only input into HID. Replay now uses the session
+entry point alongside the flushed text, preserving the original metadata and
+unmarked identity. Ordering against a release already queued during flushing
+still requires native acceptance.
 
-The input PR is [#1293](https://github.com/moona3k/macparakeet/pull/1293), stacked
-on the macOS runner migration [#1294](https://github.com/moona3k/macparakeet/pull/1294).
+The input PR is [#1293](https://github.com/moona3k/macparakeet/pull/1293). As of
+2026-10-30, the macOS runner prerequisite
+[#1294](https://github.com/moona3k/macparakeet/pull/1294) is merged and the input
+PR targets main. The test-only readiness follow-up
+[#1298](https://github.com/moona3k/macparakeet/pull/1298) remains separate.
 A [published walkthrough](https://macparakeet.com/dev/pr/1293) explains the same
-boundary and acceptance limits. Neither PR merges or releases this fix.
+boundary and acceptance limits. The subsequent [fresh review](fresh-eye-review.md)
+records findings and the merge/release gates.

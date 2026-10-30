@@ -38,6 +38,18 @@ struct ContinuousStreamingClock: StreamingCursorClock {
 }
 
 struct CGStreamingCursorEventPosting: StreamingCursorEventPosting {
+    /// Forward intercepted input at the same stage as the flushed text. The
+    /// original event has reached the session stage; replay must not write to HID.
+    /// Preserve user/third-party identity rather than marking it as our output.
+    static func replayInterceptedInput(
+        _ event: CGEvent,
+        postEvent: (CGEvent, CGEventTapLocation) -> Void = { $0.post(tap: $1) }
+    ) -> Bool {
+        guard let copy = event.copy() else { return false }
+        postEvent(copy, AppGeneratedKeyboardEvents.postingLocation)
+        return true
+    }
+
     func typeUnicode(_ text: String) throws {
         guard AXIsProcessTrusted() else {
             throw StreamingCursorError.eventSourceUnavailable
@@ -122,12 +134,11 @@ private final class HeadInsertStreamingCursorInterruptToken: StreamingCursorInte
         lock.unlock()
         if first {
             onInterrupt()
-            // Swallow the in-flight session event and re-inject a copy at HID so
-            // remainder Unicode posts land before the user's key/click.
-            guard let copy = event.copy() else {
+            // Queue the intercepted input behind the remainder at the same
+            // session entry point. Replaying upstream would contaminate HID.
+            guard CGStreamingCursorEventPosting.replayInterceptedInput(event) else {
                 return Unmanaged.passUnretained(event)
             }
-            copy.post(tap: .cghidEventTap)
             return nil
         }
         return Unmanaged.passUnretained(event)
@@ -213,7 +224,7 @@ public final class StreamingCursorInserter: StreamingCursorInserting, @unchecked
     }
 }
 
-/// Serializes HID posts so a head-insert interrupt cannot reorder or duplicate chunks.
+/// Serializes text posts so a head-insert interrupt cannot reorder or duplicate chunks.
 private final class StreamingCursorPlayback: @unchecked Sendable {
     private let posting: any StreamingCursorEventPosting
     private let lock = NSRecursiveLock()
