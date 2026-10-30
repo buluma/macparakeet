@@ -129,6 +129,26 @@ final class SyntheticPasteHotkeyTests: XCTestCase {
         }
     }
 
+    func testTapRecoveryKeepsSessionHeldPeerClaimWhenHIDReportsUp() {
+        let owner = HotkeyManager(
+            trigger: .fn, gestureMode: .holdOnly,
+            peerTriggers: [HotkeyTrigger(kind: .keyCode, modifierName: nil, keyCode: 9)])
+        owner.setKeyStateProvidersForTesting(session: { $0 == 9 }, hid: { _ in false })
+        owner.setPhysicalFlagsProviderForTesting { [] }
+        owner.onCancelRecording = { XCTFail("peer release must not cancel owner") }
+        owner.onDiscardRecording = { _ in XCTFail("peer release must not discard owner") }
+        owner.onStopRecording = { XCTFail("recovery with Fn held must not stop owner") }
+        _ = owner.modifierFlagsChangedOutputsForTesting(flags: [.maskSecondaryFn], timestampMs: 1_000)
+        XCTAssertEqual(owner.startupDebounceElapsedForTesting(), [.startRecording(mode: .holdToTalk)])
+        XCTAssertEqual(
+            owner.modifierKeyDownOutputsForTesting(keyCode: 9, timestampMs: 1_100, flags: [.maskSecondaryFn]), [])
+        XCTAssertEqual(owner.recoverFromDisabledTapForTesting(flags: [.maskSecondaryFn], timestampMs: 1_200), [])
+        XCTAssertEqual(owner.modifierKeyUpOutputsForTesting(keyCode: 9, timestampMs: 1_300), [])
+        XCTAssertEqual(
+            owner.modifierFlagsChangedOutputsForTesting(flags: [], timestampMs: 2_000),
+            [.cancelStartupDebounce, .cancelHoldWindow, .stopRecording])
+    }
+
     func testAuxiliaryAndTransformListenersIgnoreOwnOutputAndStillAcceptUnmarkedInput() throws {
         let auxiliary = GlobalShortcutManager(trigger: HotkeyTrigger(kind: .keyCode, modifierName: nil, keyCode: 9))
         let transforms = TransformsHotkeyRegistry()

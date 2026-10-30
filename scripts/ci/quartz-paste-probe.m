@@ -19,16 +19,34 @@ int main(void) {
             styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];
         NSTextView *text = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, 400, 160)];
         window.contentView = text;
-        [window makeKeyAndOrderFront:nil];
-        [window makeFirstResponder:text];
-        [app activate];
+        NSMenu *menu = [[NSMenu alloc] initWithTitle:@"Main"];
+        NSMenuItem *edit = [[NSMenuItem alloc] initWithTitle:@"Edit" action:NULL keyEquivalent:@""];
+        edit.submenu = [[NSMenu alloc] initWithTitle:@"Edit"];
+        [edit.submenu addItemWithTitle:@"Paste" action:@selector(paste:) keyEquivalent:@"v"];
+        [menu addItem:edit];
+        app.mainMenu = menu;
+        [NSNotificationCenter.defaultCenter addObserverForName:NSApplicationDidFinishLaunchingNotification
+            object:app queue:nil usingBlock:^(NSNotification *notification) {
+                (void)notification;
+                [window makeKeyAndOrderFront:nil];
+                [window makeFirstResponder:text];
+                [app activate];
+            }];
         NSString *expected = @"quartz-session-paste-1286";
-        [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:NO block:^(NSTimer *timer) {
-            (void)timer;
+        NSTimeInterval readinessDeadline = NSProcessInfo.processInfo.systemUptime + 10;
+        __block NSTimeInterval deliveryDeadline = 0;
+        [NSTimer scheduledTimerWithTimeInterval:0.1 repeats:YES block:^(NSTimer *timer) {
             if (!app.active || !window.keyWindow || window.firstResponder != text) {
-                puts("{\"result\":\"unavailable\",\"reason\":\"receiver_not_focused\"}");
-                exit(1);
+                if (NSProcessInfo.processInfo.systemUptime >= readinessDeadline) {
+                    printf("{\"result\":\"unavailable\",\"reason\":\"receiver_not_focused\","
+                           "\"active\":%d,\"key_window\":%d,\"first_responder\":%d}\n",
+                           app.active, window.keyWindow, window.firstResponder == text);
+                    exit(1);
+                }
+                return;
             }
+            [timer invalidate];
+            deliveryDeadline = NSProcessInfo.processInfo.systemUptime + 5;
             [NSPasteboard.generalPasteboard clearContents];
             [NSPasteboard.generalPasteboard setString:expected forType:NSPasteboardTypeString];
             CGEventSourceRef source = CGEventSourceCreate(kCGEventSourceStateCombinedSessionState);
@@ -54,11 +72,10 @@ int main(void) {
                 [timer invalidate];
                 exit(0);
             }
-        }];
-        [NSTimer scheduledTimerWithTimeInterval:5 repeats:NO block:^(NSTimer *timer) {
-            (void)timer;
-            puts("{\"result\":\"timeout\"}");
-            exit(1);
+            if (deliveryDeadline && NSProcessInfo.processInfo.systemUptime >= deliveryDeadline) {
+                puts("{\"result\":\"paste_delivery_timeout\"}");
+                exit(1);
+            }
         }];
         [app run];
         return 1;
