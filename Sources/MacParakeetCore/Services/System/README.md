@@ -75,8 +75,10 @@ flushed text. Preserve the original input's metadata without applying our
 marker: moving an intercepted session event upstream would contaminate HID.
 If the interrupt flush fails, release the user's input promptly and stop this
 insertion permanently. Do not retry after the input may have moved the cursor
-or focus. Report `partialInsert` even with no committed text so the coordinator
-offers clipboard recovery without automatically pasting into the new target.
+or focus. For a non-cancelled insertion, report `partialInsert` even with no
+committed text so the coordinator offers clipboard recovery without automatic
+paste. Cancellation retains its quiet return; the caller suppresses success,
+recovery, and post-insert actions, and the stopped flush is never retried.
 
 Bare-Fn admission reads HID keys; custom-trigger and peer recovery retain
 session semantics. Older app versions or other software can still leave HID

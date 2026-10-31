@@ -8,9 +8,9 @@ Preserve physical typing interruption, passive Fn delivery, peer ownership,
 custom shortcuts, layout-aware copy/paste, and clipboard restoration.
 Keep tap callbacks independent of the main thread and free of diagnostic I/O.
 
-The persistent rejection is established by source inspection: the current
-physical-key provider reads combined session state and subtracts only releases
-remembered by this process. The rare native trigger is not reproduced. A marker
+The persistent rejection was established by source inspection: the old
+physical-key provider read combined session state and subtracted only releases
+remembered by its process. The rare native trigger is not reproduced. A marker
 alone cannot fix the aggregate veto or survive a fresh process.
 
 ## Work
@@ -26,8 +26,9 @@ alone cannot fix the aggregate veto or survive a fresh process.
    contract, feature spec, subsystem README, and root-cause record.
 4. Commit, open a PR, obtain independent review, and drive exact-head GitHub CI
    and valid review findings to completion. The user subsequently authorized
-   merge after a fresh review, including Opus 5.5, and passing checks. Release
-   remains gated on native acceptance.
+   merge after final review without waiting for another CI run. The production
+   head passed CI and the expanded native probe; final review also includes
+   Sonnet 5.5 at xhigh effort. Release remains gated on native acceptance.
 
 ## Verification
 

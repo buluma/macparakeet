@@ -164,8 +164,10 @@ flags, so another shortcut's keys reach the manager that owns a held take.
   promoted upstream into HID state.
 - If that flush fails, user input resumes and this insertion must not post any
   remaining text afterward, including through retry or cancellation cleanup.
-  Report stopped insertion and offer clipboard recovery without automatic
-  paste, even when the failure occurred before any text was inserted.
+  For a non-cancelled insertion, report stopped insertion and offer clipboard
+  recovery without automatic paste, even when no text was inserted. Task
+  cancellation remains quiet: the caller suppresses success, recovery, and
+  post-insert actions, and cancellation must not retry a stopped flush.
 
 ## Non-stable fields
 

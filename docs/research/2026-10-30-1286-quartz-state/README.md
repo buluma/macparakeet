@@ -37,6 +37,31 @@ in this experiment. See [Apple source-state documentation](https://developer.app
 
 ## Scope and limits
 
+### Final replay evidence
+
+[Run 41141415735](https://github.com/moona3k/macparakeet/actions/runs/41141415735)
+passed at `556ce1dea0ffa0c2ed6c1f646be5f2c681eb6642`. Its expanded probe
+posted an original session down, a second down at either replay point, and
+the original producer's session up. Each step had an event-delivery witness.
+
+| Replay point | HID after replay down | Session after producer's session up | HID after producer's session up |
+| --- | --- | --- | --- |
+| HID (old path) | Down | Up | Down |
+| Session (fixed path) | Up | Up | Up |
+
+This confirms that promoting session input into HID can leave the HID table
+stale even when its producer delivers a session release. The fixed replay
+stays at session and leaves both tables up after release. Cleanup restored
+both tables in each experiment. [Exact raw state artifact](quartz-key-state-556ce1dea.jsonl)
+and [native paste artifact](quartz-paste-556ce1dea.jsonl) are retained here.
+The AppKit receiver again observed the generated paste.
+
+This is a sequential state-table experiment, not a reproduction of the live
+interrupt callback or the reporter's Jump Desktop setup. It narrows the cause
+of the replay defect without proving the original rare incident's trigger.
+
+### Behavior boundaries
+
 The shared factory marks events and preserves layout-resolved key codes,
 Command flags, pairing, and clipboard behavior. Hotkey listeners ignore the
 marker before consuming input or modifying gesture/release state. The existing
@@ -82,6 +107,14 @@ session versus held HID keys, new managers and tap recovery, delayed/missing
 synthetic releases, and legacy recovery. Existing physical-input, peer,
 Command-layout, and clipboard restoration suites remain part of GitHub CI.
 No local Swift build/test or no-mistakes test gate is run, as requested.
+
+The final production head `556ce1dea0ffa0c2ed6c1f646be5f2c681eb6642`
+passed [full CI](https://github.com/moona3k/macparakeet/actions/runs/41141415724):
+8,269 xUnit cases with zero failures/errors, plus 30 Swift Testing cases.
+The seven new replay, session-only-admission, and interrupt-failure regressions
+were individually present and passing in the downloaded XML. Swift 6 and
+release/bundle checks also passed. These are hosted checks, not the outstanding
+native release acceptance cases below.
 
 The first full input-branch suite executed 8,230 cases with one failure in the
 new test's attempt to overwrite an already-stamped event's source user data.

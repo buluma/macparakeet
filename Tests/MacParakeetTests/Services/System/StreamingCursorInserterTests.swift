@@ -288,6 +288,8 @@ final class StreamingCursorInserterTests: XCTestCase {
         await clock.waitUntilSleepStarted()
         interrupts.fire()
         task.cancel()
+        // Quiet cancellation is intentional: the caller checks Task.isCancelled
+        // before actions or success reporting. It must not retry the failed flush.
         try await task.value
 
         XCTAssertEqual(poster.snapshot().attempts, 2)

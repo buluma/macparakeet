@@ -93,9 +93,36 @@ head's result.
 
 ## Merge and release boundary
 
-The user has authorized merging once review and checks support it. Current-head
-CI must pass before merge; the prior timed-out test run is not a pass. The
-repository does not enforce this through branch protection or auto-merge.
+At final review the user explicitly authorized merge without waiting for another
+CI run. The production head `556ce1dea0ffa0c2ed6c1f646be5f2c681eb6642` had
+already passed [full CI](https://github.com/moona3k/macparakeet/actions/runs/41141415724)
+(8,269 xUnit cases and 30 Swift Testing cases, zero failures/errors), Swift 6,
+release/bundle checks, and the expanded
+[native probe](https://github.com/moona3k/macparakeet/actions/runs/41141415735).
+The downloaded artifacts confirmed the replay boundary and all seven new
+replay/admission/interruption regression cases. Earlier timeouts remain failures
+to qualify those earlier runs; they are not reclassified as passes.
+
+The final [CodeRabbit cancellation comment](https://github.com/moona3k/macparakeet/pull/1293#discussion_r4429228526)
+identified overbroad contract wording. Cancellation intentionally returns quietly;
+the coordinator checks `Task.isCancelled` before success, clipboard retention,
+or post-insert actions, and its error handler also skips recovery when cancelled.
+Throwing `partialInsert` would not enable recovery. The contract now limits
+clipboard recovery to non-cancelled insertions and explicitly preserves quiet
+cancellation with no retry. A test comment explains the existing assertion;
+runtime behavior and assertions are unchanged. Independent review confirmed
+this disposition.
+
+The final fresh review used Claude Code with `claude-sonnet-5-5`, `xhigh`
+effort, no fallback, and no tools. Session
+`4152c82c-2470-42b4-bb14-0b91b14fcb78` completed successfully; response model
+metadata confirmed Sonnet 5.5. It reviewed the complete diff, governing
+source/tests/contracts, caller excerpts, and current bot feedback at the
+production head. It found no P0/P1/P2 issue or merge blocker and agreed with
+the cancellation clarification. Its requested caller inventory check confirmed
+that `DictationFlowCoordinator` is the only production insertion caller.
+The final follow-up changes only documentation, preserved probe artifacts,
+and a test comment; production behavior and test assertions are unchanged.
 
 The fix prevents our direct keyboard output from creating this admission veto.
 It does not repair arbitrary old or third-party HID contamination. An unmarked
