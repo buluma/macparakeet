@@ -1165,7 +1165,7 @@ Settings open in the content area when "Settings" is selected in the sidebar. Th
 - **AI** — Optional provider setup for summaries, transcript chat, prompt actions, and live Ask.
 - **System** — Appearance; a Startup card with Launch at login, Hide menu bar icon, and Menu bar only mode; permissions; storage; updates; privacy/telemetry; onboarding reset; about; and fenced Reset & Cleanup actions.
 
-`SettingsRootViewModel` owns active-tab persistence and search state. `SettingsSearchIndex` provides cross-tab search results and includes calendar entries while `AppFeatures.calendarEnabled` is `true` (currently enabled; they surface once Calendar access is granted), and hides them when the flag is off. The legacy card sketches below are retained only as historical content references; their grouping is not the current v0.6 IA.
+`SettingsRootViewModel` owns active-tab persistence and search state. `SettingsSearchIndex` provides cross-tab search results and includes calendar entries while `AppFeatures.calendarEnabled` is `true` (currently enabled; they surface once Calendar access is granted), and hides them when the flag is off. Voice-profile search follows the current Settings visibility: stored voices or a failed store read keep management discoverable even when enrollment is disabled; Remember speakers requires both enrollment availability and speaker detection. Voice profiles load at the Settings root so search works before the meeting card opens. The legacy card sketches below are retained only as historical content references; their grouping is not the current v0.6 IA.
 
 ### General (v0.1)
 
