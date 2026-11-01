@@ -63,8 +63,8 @@ The [notarized DMG](https://downloads.macparakeet.com/MacParakeet.dmg) is the st
 
 | Channel | Status | Includes |
 |---------|--------|----------|
-| Stable DMG `0.8.10` | Recommended for normal use; [published October 14, 2026](https://github.com/moona3k/macparakeet/releases/tag/v0.8.10) | Local dictation, file/media transcription, meetings, speaker-count selection, transcript find and replace, additional dictation shortcuts, meeting-capture recovery improvements, and bundled CLI 5.1.0. See the [0.8.10 release notes](docs/releases/0.8.10/github.md). |
-| Development source (this revision) | Advances beyond 0.8.10; reminder feature targets the next app release | Adds opt-in **Beta** meeting recording reminders, default off and available in Release builds of this source. No automatic activity-based recording. See the [release/flag table](spec/README.md#release-channels-and-feature-flags) for remaining gated features and verification limits. |
+| Stable DMG `0.8.10` | Recommended for normal use; [published October 14, 2026](https://github.com/moona3k/macparakeet/releases/tag/v0.8.10) | Capture, editing, Library, speaker-count selection, transcript find and replace, optional second dictation shortcut, opt-in meeting URL controls, and bounded meeting memory. Apple Intelligence serves cleanup only. Includes CLI 5.1.0. See the [0.8.10 release notes](docs/releases/0.8.10/github.md). |
+| Development source (this revision) | Advances beyond the published 0.8.10 app; reminder feature targets the next app release | Adds opt-in **Beta** meeting recording reminders, default off and available in Release builds of this source, with no automatic activity-based recording. Also adds opt-in dictation URL controls, configurable dictation cues, saved-meeting finalization/recovery fixes, AEC reference lookahead, split-stream YouTube playback, keyboard-event isolation, knowledge-card recovery, and Settings/vocabulary fixes. See the [release/flag table](spec/README.md#release-channels-and-feature-flags); merged code is not a new stable release. |
 
 See the [canonical release and feature-gate status](spec/README.md#release-channels-and-feature-flags). This source adds opt-in **Beta** meeting recording reminders under Settings → Capture → Meetings for the next app release. The published stable 0.8.10 download does not include these reminders. App-aware AI Formatter profiles and the in-process MLX LLM remain gated; source presence does not mean they are available in the stable app.
 
@@ -85,7 +85,7 @@ surfaces are called out in the [canonical status table](spec/README.md#release-c
 
 **Text cleanup** — Filler word removal, custom word replacements, text snippets with triggers. Deterministic pipeline, no LLM needed.
 
-**AI features** — Optional summaries, chat, AI formatter, and Transforms for rewriting selected text through your configured provider. Connect a cloud provider (OpenAI, Anthropic, Gemini, OpenRouter, Moonshot/Kimi, DeepSeek, Qwen, Z.AI, MiniMax), local runtime (Ollama, LM Studio), Apple Intelligence on macOS 26 when the Mac is eligible, an OpenAI-compatible endpoint, or a CLI tool (Claude Code, Codex). Entirely opt-in.
+**AI features** — Optional summaries, chat, AI formatter, and Transforms for rewriting selected text through your configured provider. Connect a cloud provider (OpenAI, Anthropic, Gemini, OpenRouter, Moonshot/Kimi, DeepSeek, Qwen, Z.AI, MiniMax), local runtime (Ollama, LM Studio), an OpenAI-compatible endpoint, or a CLI tool (Claude Code, Codex). Apple Intelligence on macOS 26 serves the cleanup route only, on eligible Macs. Entirely opt-in.
 
 ### Limitations
 
@@ -291,7 +291,7 @@ AI features are entirely **opt-in** and separate from speech recognition — tra
 | Type | Options |
 |------|---------|
 | Cloud | Anthropic (Claude), OpenAI, Google Gemini, OpenRouter, Moonshot (Kimi), DeepSeek, Qwen, Z.AI, MiniMax |
-| Local | Ollama, LM Studio, Apple Intelligence for dictation cleanup (macOS 26, eligible Macs, no API key) |
+| Local | Ollama, LM Studio, Apple Intelligence for the cleanup route only (macOS 26, eligible Macs, no API key) |
 | Custom | OpenAI-Compatible (any API-shaped endpoint — vLLM, LocalAI, LiteLLM, llama.cpp server, third-party hosts) |
 | CLI subprocess | Claude Code, Codex, or another configured command |
 

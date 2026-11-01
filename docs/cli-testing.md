@@ -16,6 +16,16 @@ before exiting one so verification does not create a duplicate by importing agai
 
 Use `macparakeet-cli` for fast, repeatable testing of core transcription and text-processing flows.
 
+## Parity review
+
+The [capability map](../integrations/capabilities.md) identifies shared workflows
+and intentional differences. A source/docs audit or installed-binary help probe
+is not a fresh build or native qualification of development source. Use
+projection-aware transcript reads (`export`, `meetings show`) when testing an
+installed CLI 5.1.0: its history JSON predates the merged correction fix (PR
+#1304), which source builds include. Keep synthetic test state separate from user data; the state
+root override does not isolate shared preferences or Keychain.
+
 ## Build Once
 
 ```bash
@@ -472,7 +482,8 @@ or `error`. `schema_skew` means the shared database was migrated by a newer
 MacParakeet app than this CLI build understands — upgrade `macparakeet-cli`
 and retry. Never reset or delete the user database to make a health probe pass.
 
-For a DEBUG-only missing-state regression (after building the CLI):
+For a missing-state regression (after building the CLI; Debug and Release builds
+both honor the state-root override, and this example uses the debug build):
 
 ```bash
 state_parent="$(mktemp -d)"
@@ -482,9 +493,9 @@ test ! -e "$state_parent/absent"
 ```
 
 Expect `directoriesOK: false` and `database.status: "missing"` with exit 0:
-health is a component report, not a single pass/fail verdict. The DEBUG state
-root does not isolate shared UserDefaults or Keychain; do not change configuration
-for this check. Release builds ignore this DEBUG override.
+health is a component report, not a single pass/fail verdict. The override must
+be an absolute path. It does not isolate shared UserDefaults, Keychain, or paths
+already stored in existing rows; do not change configuration for this check.
 
 ## Meetings
 

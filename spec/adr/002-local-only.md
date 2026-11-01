@@ -44,6 +44,13 @@ LLM-powered features (summaries, chat/Meeting Ask, AI Formatter, and Transforms)
   - No default provider — user must explicitly opt in
   - Features work without any provider configured (they're just unavailable)
 
+- **Voice Control decisions (implemented, release-gated)**: explicit command
+  consent permits Jev to receive command text and bounded visible UI/browser or
+  OCR text under [ADR-033](033-explicit-voice-control.md). Captured audio and
+  screen pixels stay local. Writing-provider consent is separate; configuring
+  a summary provider does not authorize this control/context-disclosure path.
+  See the [Voice Control contract](../contracts/voice-control.md).
+
 ### Other network surfaces
 
 - **Media imports**: User-requested public media downloads through yt-dlp and
@@ -129,7 +136,7 @@ Cloud LLM costs are paid directly by the user to their provider (Anthropic, Open
 - Audio never leaves the device — core privacy promise intact
 - Transcription works fully offline — no degradation
 - LLM features use best-available models (Claude, GPT-4) without bundling a runtime
-- Local-only users can use Ollama or LM Studio, and the eligible on-device Apple Intelligence provider for dictation cleanup
+- Local-only users can use Ollama or LM Studio, and the eligible on-device Apple Intelligence provider for the cleanup route only
 - Zero resource impact from LLM in the default configuration (no GPU memory, no automatic model downloads; the developer-gated Local MLX path in ADR-011 is explicit opt-in)
 - Business model remains flexible: current public builds are free/GPL, while official paid distribution/support can be added without changing the local-first architecture
 - App Store compatible
@@ -137,7 +144,7 @@ Cloud LLM costs are paid directly by the user to their provider (Anthropic, Open
 ### Negative
 
 - **Messaging complexity**: Local speech and offline core operation are narrower than a no-network app. Discover, updates, opted-in providers, and opt-out telemetry must be described independently.
-- **Cloud providers require internet**: Summaries, chat/Meeting Ask, AI Formatter, and Transforms can run offline only when configured with an available local provider (eligible on-device Apple Intelligence covers dictation cleanup only). Transcription still works offline.
+- **Cloud providers require internet**: Summaries, chat/Meeting Ask, AI Formatter, and Transforms can run offline only when configured with an available local provider (eligible on-device Apple Intelligence covers the cleanup route only). Transcription still works offline.
 - **Transcript text exposure**: When using cloud providers or cloud-backed CLI tools, transcript text is sent to third-party services. Must be clear in UI. Users with sensitive content should choose a local provider or skip LLM features.
 - **No cloud backup or sync**: User data stays on-device. If the Mac is lost, dictation history is lost. This is intentional.
 - **No collaborative corpus**: ADR-029 permits a separately encrypted, read-only text snapshot. Real-time collaboration, team vocabularies, comments, and cross-device Library sync remain out of scope.
