@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import CryptoKit
 import SwiftUI
 import XCTest
 @testable import MacParakeet
@@ -76,12 +77,63 @@ final class DictationSoundConfigurationTests: XCTestCase {
         let suite = "DictationSoundTests.\(UUID())"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let start = DictationSoundConfiguration(style: .handyPop, volume: 0)
-        let stop = DictationSoundConfiguration(style: .handyMarimba, volume: 0.73)
+        let start = DictationSoundConfiguration(style: .bloom, volume: 0)
+        let stop = DictationSoundConfiguration(style: .bloom, volume: 0.73)
         start.save(for: .start, defaults: defaults)
         stop.save(for: .stop, defaults: defaults)
         XCTAssertEqual(DictationSoundConfiguration.load(for: .start, defaults: defaults), start)
         XCTAssertEqual(DictationSoundConfiguration.load(for: .stop, defaults: defaults), stop)
+    }
+
+    func testLegacyPresetsMigrateWithoutResettingVolumeOrRetainedImport() throws {
+        let suite = "DictationSoundTests.\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let fileName = "\(UUID()).wav"
+        let aliases: [(String, DictationSoundStyle)] = [
+            ("handyPop", .bloom), ("handyMarimba", .bloom), ("pebble", .bloom), ("gong", .gong),
+        ]
+        for enabled in [false, true] {
+            defaults.set(enabled, forKey: "playDictationCaptureSounds")
+            for cue in DictationSoundCue.allCases {
+                for (legacyName, style) in aliases {
+                    for volume in [0.0, 0.73] {
+                        let data = try JSONSerialization.data(withJSONObject: [
+                            "style": legacyName, "volume": volume,
+                            "customFileName": fileName, "customDisplayName": "My sound.wav",
+                        ])
+                        defaults.set(data, forKey: DictationSoundConfiguration.preferenceKey(for: cue))
+                        let value = DictationSoundConfiguration.load(for: cue, defaults: defaults)
+                        XCTAssertEqual(
+                            value,
+                            DictationSoundConfiguration(
+                                style: style, volume: volume, customFileName: fileName,
+                                customDisplayName: "My sound.wav"))
+                        XCTAssertEqual(defaults.bool(forKey: "playDictationCaptureSounds"), enabled)
+                        value.save(for: cue, defaults: defaults)
+                        let saved = try XCTUnwrap(
+                            defaults.data(forKey: DictationSoundConfiguration.preferenceKey(for: cue)))
+                        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: saved) as? [String: Any])
+                        XCTAssertEqual(json["style"] as? String, style.rawValue)
+                    }
+                }
+            }
+        }
+    }
+
+    func testEveryCurrentStyleRoundTripsWithoutChangingSilenceOrCustomSelection() throws {
+        let suite = "DictationSoundTests.\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        for cue in DictationSoundCue.allCases {
+            for style in DictationSoundStyle.allCases {
+                let value = DictationSoundConfiguration(
+                    style: style, volume: 0,
+                    customFileName: "\(UUID()).wav", customDisplayName: "Retained sound.wav")
+                value.save(for: cue, defaults: defaults)
+                XCTAssertEqual(DictationSoundConfiguration.load(for: cue, defaults: defaults), value)
+            }
+        }
     }
 
     func testCorruptAndUnknownPreferencesFallBackWithoutTouchingOtherSettings() throws {
@@ -98,9 +150,10 @@ final class DictationSoundConfigurationTests: XCTestCase {
     }
 
     func testPresetResourcesAreDistinctForEachCue() {
-        let names = [.handyPop, .handyMarimba].flatMap { (style: DictationSoundStyle) in
+        let names = DictationSoundStyle.allCases.flatMap { style in
             DictationSoundCue.allCases.compactMap { style.resourceName(for: $0) }
         }
+        XCTAssertEqual(names.count, 4)
         XCTAssertEqual(Set(names).count, 4)
     }
 }
@@ -318,7 +371,7 @@ final class DictationSoundControllerTests: XCTestCase {
         let h = try SoundHarness()
         defer { h.cleanup() }
         h.systemSoundEnabled = false
-        h.controller.setStyle(.handyPop, for: .start)
+        h.controller.setStyle(.bloom, for: .start)
         h.controller.play(.start)
         XCTAssertTrue(h.audioPlayers.allSatisfy { $0.plays.isEmpty })
         XCTAssertEqual(h.controller.preview(.start), .mutedBySystem)
@@ -328,7 +381,7 @@ final class DictationSoundControllerTests: XCTestCase {
     func testMissingPresetFallsBackWithWarning() async throws {
         let h = try SoundHarness(includeAssets: false)
         defer { h.cleanup() }
-        h.controller.setStyle(.handyPop, for: .start)
+        h.controller.setStyle(.bloom, for: .start)
         h.controller.play(.start)
         XCTAssertEqual(h.systems[.start]?.plays.count, 1)
         XCTAssertNotNil(h.controller.warnings[.start])
@@ -338,7 +391,7 @@ final class DictationSoundControllerTests: XCTestCase {
     func testFailedPresetUsesMatchingSystemFallbackAtConfiguredVolume() throws {
         let h = try SoundHarness()
         defer { h.cleanup() }
-        h.controller.setStyle(.handyMarimba, for: .stop)
+        h.controller.setStyle(.bloom, for: .stop)
         h.controller.setVolume(0.7, for: .stop)
         h.audioPlayers.forEach { $0.playSucceeds = false }
 
@@ -374,7 +427,7 @@ final class DictationSoundControllerTests: XCTestCase {
     func testFailedCueAndFallbackReportUnavailableAndClearWarningAfterRecovery() throws {
         let h = try SoundHarness()
         defer { h.cleanup() }
-        h.controller.setStyle(.handyPop, for: .start)
+        h.controller.setStyle(.bloom, for: .start)
         h.audioPlayers.forEach { $0.playSucceeds = false }
         h.systems[.start]?.playSucceeds = false
 
@@ -406,15 +459,62 @@ final class DictationSoundControllerTests: XCTestCase {
     }
 
     @MainActor
-    func testHandyPresetsArePreparedOnceNotOnEachCapture() async throws {
+    func testOriginalPresetsArePreparedOnceNotOnEachCapture() async throws {
         let h = try SoundHarness()
         defer { h.cleanup() }
         XCTAssertEqual(h.audioPlayers.count, 4)
-        h.controller.setStyle(.handyPop, for: .start)
+        h.controller.setStyle(.bloom, for: .start)
         h.controller.play(.start)
         h.controller.play(.start)
         XCTAssertEqual(h.audioPlayers.count, 4)
         XCTAssertEqual(h.audioPlayers.reduce(0) { $0 + $1.plays.count }, 2)
+        XCTAssertTrue(h.systems.values.allSatisfy { $0.plays.isEmpty })
+    }
+
+    @MainActor
+    func testEveryOriginalCueUsesItsOwnCaptureAndPreviewAssetWithoutSystemFallback() throws {
+        let h = try SoundHarness(includeAssets: false)
+        defer { h.cleanup() }
+        let styles: [DictationSoundStyle] = [.bloom, .gong]
+        var assets: [String: Data] = [:]
+        for style in styles {
+            for cue in DictationSoundCue.allCases {
+                let name = try XCTUnwrap(style.resourceName(for: cue))
+                assets[name] = SoundFixture.wave(seconds: Double(assets.count + 1) / 100)
+            }
+        }
+        var players: [Data: [CueSpy]] = [:]
+        let controller = DictationSoundController(
+            defaults: h.defaults, library: h.library,
+            makePlayer: { data in
+                let player = CueSpy()
+                players[data, default: []].append(player)
+                return player
+            },
+            makeSystemPlayer: { h.systems[$0] }, resourceData: { assets[$0] },
+            soundEffectsEnabled: { true }
+        )
+        for style in styles {
+            for cue in DictationSoundCue.allCases {
+                let name = try XCTUnwrap(style.resourceName(for: cue))
+                let data = try XCTUnwrap(assets[name])
+                let capture = try XCTUnwrap(players[data]?.first)
+                let volume = cue == .start ? 0.29 : 0.63
+                controller.setStyle(style, for: cue)
+                controller.setVolume(volume, for: cue)
+                controller.play(cue)
+                XCTAssertEqual(capture.plays, [Float(volume)])
+                XCTAssertNil(controller.warnings[cue])
+                XCTAssertEqual(players[data]?.count, 1, "Capture must reuse its prepared player")
+
+                capture.isPlaying = false  // Simulate playback finishing before preview.
+                XCTAssertEqual(controller.preview(cue), .played)
+                let preview = try XCTUnwrap(players[data]?.last)
+                XCTAssertEqual(players[data]?.count, 2)
+                XCTAssertFalse(preview === capture)
+                XCTAssertEqual(preview.plays, [Float(volume)])
+            }
+        }
         XCTAssertTrue(h.systems.values.allSatisfy { $0.plays.isEmpty })
     }
 
@@ -475,7 +575,7 @@ final class DictationSoundControllerTests: XCTestCase {
     func testFailedImportKeepsPreviousSelectionAndVolume() async throws {
         let h = try SoundHarness()
         defer { h.cleanup() }
-        h.controller.setStyle(.handyMarimba, for: .start)
+        h.controller.setStyle(.bloom, for: .start)
         h.controller.setVolume(0.71, for: .start)
         let before = h.controller.configuration(for: .start)
         let source = h.root.appendingPathComponent("invalid.wav")
@@ -630,21 +730,37 @@ final class DictationSoundControllerTests: XCTestCase {
     func testActualBundledPresetFilesLoadThroughProductionResourceResolver() async throws {
         let h = try SoundHarness()
         defer { h.cleanup() }
-        var decodedCount = 0
+        let expected: [(DictationSoundStyle, DictationSoundCue, String, TimeInterval)] = [
+            (.bloom, .start, "c59dc2829470c65c37a864d1fc0125f0898378738fdf29aeaf91f35616d6a410", 0.660),
+            (.bloom, .stop, "e56b0fc90c77130ae3ac928d06d6ceedf76a5774393991db475329a2aafaca83", 0.860),
+            (.gong, .start, "2411a8b858e6b79994acc0f6a939c492cce121242786187e68d00c4e72c98a42", 0.800),
+            (.gong, .stop, "131f0d4d80f3c1dbd93845766e1f252fb6fa0b3e0437f960804bcac5d128b78d", 0.950),
+        ]
+        var players: [String: CueSpy] = [:]
         let controller = DictationSoundController(
             defaults: h.defaults, library: h.library,
             makePlayer: { data in
+                let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+                let asset = try XCTUnwrap(expected.first { $0.2 == hash }, "Unexpected bundled audio")
                 let audio = try AVAudioPlayer(data: data)
-                XCTAssertGreaterThan(audio.duration, 0)
-                XCTAssertLessThanOrEqual(audio.duration, 5)
-                decodedCount += 1
-                return CueSpy()
+                XCTAssertEqual(audio.duration, asset.3, accuracy: 1 / 48_000)
+                XCTAssertEqual(audio.format.sampleRate, 48_000)
+                XCTAssertEqual(audio.numberOfChannels, 2)
+                let player = CueSpy()
+                players[hash] = player
+                return player
             },
-            makeSystemPlayer: { _ in CueSpy() }, soundEffectsEnabled: { true }
+            makeSystemPlayer: { h.systems[$0] }, soundEffectsEnabled: { true }
         )
-        XCTAssertEqual(decodedCount, 4)
-        controller.setStyle(.handyMarimba, for: .stop)
-        XCTAssertNil(controller.warnings[.stop])
+        XCTAssertEqual(players.count, expected.count)
+        for (style, cue, hash, _) in expected {
+            let player = try XCTUnwrap(players[hash])
+            controller.setStyle(style, for: cue)
+            controller.play(cue)
+            XCTAssertEqual(player.plays, [0.4], "Each cue must play its own approved asset, not a swapped file")
+            XCTAssertNil(controller.warnings[cue])
+        }
+        XCTAssertTrue(h.systems.values.allSatisfy { $0.plays.isEmpty })
     }
 
     @MainActor

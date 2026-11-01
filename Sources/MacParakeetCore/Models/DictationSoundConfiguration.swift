@@ -12,16 +12,16 @@ public enum DictationSoundCue: String, CaseIterable, Codable, Sendable {
 
 public enum DictationSoundStyle: String, CaseIterable, Codable, Sendable {
     case system
-    case handyPop
-    case handyMarimba
+    case bloom
+    case gong
     case custom
     case silent
 
     public var title: String {
         switch self {
         case .system: "macOS default"
-        case .handyPop: "Handy · Pop"
-        case .handyMarimba: "Handy · Marimba"
+        case .bloom: "Bloom"
+        case .gong: "Gong"
         case .custom: "Custom file"
         case .silent: "None"
         }
@@ -29,9 +29,23 @@ public enum DictationSoundStyle: String, CaseIterable, Codable, Sendable {
 
     public func resourceName(for cue: DictationSoundCue) -> String? {
         switch self {
-        case .handyPop: "handy_pop_\(cue.rawValue)"
-        case .handyMarimba: "handy_marimba_\(cue.rawValue)"
+        case .bloom, .gong: "macparakeet_\(rawValue)_\(cue.rawValue)"
         case .system, .custom, .silent: nil
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self)
+        // Retired Handy presets and the unreleased Pebble choice become Bloom
+        // without resetting volume or retained custom-file metadata.
+        switch value {
+        case "handyPop", "handyMarimba", "pebble": self = .bloom
+        default:
+            guard let style = Self(rawValue: value) else {
+                throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unknown dictation sound style")
+            }
+            self = style
         }
     }
 }
