@@ -94,6 +94,13 @@ by checking exit code first: `2` = misuse, `1` = runtime, `0` = success.
 
 ## [Unreleased]
 
+### Added
+
+- `meetings show --json` can report `activity_detection` in
+  `startContext.triggerKind` when the user accepts a meeting recording reminder.
+  Readers with a closed trigger enum must accept this additional value; existing
+  recordings keep their original trigger values.
+
 ### Fixed
 
 - Knowledge-card generation now makes one corrective retry for incomplete or
